@@ -1,0 +1,29 @@
+# ÆONIX PRISM .gitignore
+
+# Large binary models (downloaded via download-models.sh)
+models/
+bin/
+whisper.cpp/
+
+# SQLite Vault databases (created dynamically)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.db-journal
+
+# Python Bytecode & Environment
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Audio scratch buffers
+*.wav
+*.pcm
+*.tmp
+/tmp/
+
+# OS metadata
+.DS_Store
+Thumbs.db
