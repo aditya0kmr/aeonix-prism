@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="3dp"
+    android:background="@drawable/channel_item_bg"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="10dp"
+    android:nextFocusRight="@+id/btnIptvFullscreen">
+
+    <!-- Channel Index Badge -->
+    <TextView
+        android:id="@+id/txtChannelIndex"
+        android:layout_width="40dp"
+        android:layout_height="28dp"
+        android:background="@drawable/pill_bg"
+        android:gravity="center"
+        android:text="#01"
+        android:textColor="#9900E5FF"
+        android:textSize="11sp"
+        android:fontFamily="@string/font_medium" />
+
+    <!-- Channel Details -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/txtChannelName"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Channel Name"
+                android:textColor="#FFFFFFFF"
+                android:textSize="15sp"
+                android:fontFamily="@string/font_medium" />
+
+            <!-- Favorite Star Badge -->
+            <TextView
+                android:id="@+id/txtFavoriteStar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="★"
+                android:textColor="#FFD700"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/txtChannelMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="NEWS • DE • 1080p"
+            android:textColor="#70FFFFFF"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <!-- Live indicator badge -->
+    <TextView
+        android:id="@+id/txtLiveIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:letterSpacing="0.05"
+        android:text="● LIVE"
+        android:textColor="#00E5FF"
+        android:textSize="11sp"
+        android:fontFamily="@string/font_medium" />
+
+</LinearLayout>

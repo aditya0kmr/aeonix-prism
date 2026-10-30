@@ -1,0 +1,18 @@
+# Gradle caches and daemon files
+.gradle/
+build/
+app/build/
+
+# Local machine SDK directory
+local.properties
+
+# Binary artifacts and dumps
+*.apk
+*.aab
+*.hprof
+
+# Key material and keystores
+*.jks
+*.keystore
+*.key
+*.pem

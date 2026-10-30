@@ -27,3 +27,13 @@ venv/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Android Gradle & Build
+.gradle/
+build/
+app/build/
+surface/app/build/
+surface/.gradle/
+*.apk
+*.aab
+local.properties
