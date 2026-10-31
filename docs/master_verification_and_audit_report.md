@@ -13,7 +13,7 @@
 
 | Repository | Branch | Full 40-Character Git Commit SHA | Scope of Changes |
 |---|---|---|---|
-| [`aditya0kmr/aeonix-prism`](https://github.com/aditya0kmr/aeonix-prism) | `main` | *HEAD pending commit* | Action digest enforcement, writer quiescence & draining, narrow allowlist root & agent-state protection, test environment isolation, concurrency-safe lockout mutex, verifiable operator reset, test inventory & run artifacts. |
+| [`aditya0kmr/aeonix-prism`](https://github.com/aditya0kmr/aeonix-prism) | `main` | `4ffdeb0315b25cb6530d6f2e2bf9024bf92a4a0f` | Action digest enforcement, writer quiescence & draining, narrow allowlist root & agent-state protection, test environment isolation, concurrency-safe lockout mutex, verifiable operator reset, test inventory & run artifacts. |
 | [`aditya0kmr/cleanyourtv`](https://github.com/aditya0kmr/cleanyourtv) | `feature/cleanyourtv-hybrid-base` | `f3635090bd1e4604b5409e1756bfba7e6845fd68` | Pinned `SSLSocketFactory` with mandatory certificate fingerprint validation; plaintext socket fallback eliminated; empty-pin fallback prohibited. |
 
 ---

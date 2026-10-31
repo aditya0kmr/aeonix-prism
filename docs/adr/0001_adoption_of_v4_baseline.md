@@ -3,8 +3,8 @@
 * **Status:** Adopted
 * **Date:** 2026-10-31
 * **Deciders:** Sovereign Operator (Aadi) & Core Architecture Agent
-* **Backend Verification Commit:** `b24d8cd0f3cab5207f477c37bd5cf799fc01a256`
-* **Launcher Verification Commit:** `ae1ccbe8b0ade9cdc7908ab86fae59dde415ccea` (branch: `feature/cleanyourtv-hybrid-base`)
+* **Backend Verification Commit:** `4ffdeb0315b25cb6530d6f2e2bf9024bf92a4a0f`
+* **Launcher Verification Commit:** `f3635090bd1e4604b5409e1756bfba7e6845fd68` (branch: `feature/cleanyourtv-hybrid-base`)
 * **Canonical Gate Statuses:**
   * **Gate G0 (Audit & Recovery Baseline):** **PARTIAL** (Disaster recovery verified, active baseline established, multi-device release verification in progress)
   * **Gate G1 (Authority Foundation):** **OPEN** (Authority foundation hardened, negative security suites verified, active vault encryption migration deferred pending formal G1 sign-off)
