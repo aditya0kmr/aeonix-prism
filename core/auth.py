@@ -14,10 +14,18 @@ import secrets
 from typing import Dict, Any, Optional, Tuple
 
 SECRETS_DIR = os.getenv("AEONIX_SECRETS_DIR", os.path.expanduser("~/.aeonix/secrets"))
+PROD_SECRETS_DIR = os.path.realpath(os.path.expanduser("~/.aeonix/secrets"))
 
 def get_secrets_dir() -> str:
-    """Returns dynamic secrets directory respecting test isolation environment variables."""
-    return os.getenv("AEONIX_SECRETS_DIR", SECRETS_DIR)
+    """Returns dynamic secrets directory respecting test isolation environment variables. Refuses production paths in test mode."""
+    s_dir = os.getenv("AEONIX_SECRETS_DIR", SECRETS_DIR)
+    if os.getenv("AEONIX_TEST_MODE") == "1":
+        real = os.path.realpath(os.path.abspath(s_dir))
+        if real == PROD_SECRETS_DIR or real.startswith(PROD_SECRETS_DIR + os.sep):
+            raise PermissionError(
+                f"PRODUCTION_ACCESS_REFUSED_IN_TEST_MODE: Secret path '{s_dir}' resolves to production secrets directory during test execution."
+            )
+    return s_dir
 
 KEY_FILE = os.path.join(SECRETS_DIR, "master_key.json")
 

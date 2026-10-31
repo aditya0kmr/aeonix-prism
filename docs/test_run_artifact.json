@@ -1,896 +1,953 @@
 {
   "metadata": {
     "environment": "POCO M4 Pro 5G (Termux Linux)",
-    "start_time": "2026-10-31T14:25:28Z",
-    "end_time": "2026-10-31T14:26:32Z",
-    "total_duration_seconds": 64.263,
-    "total_tests": 150,
-    "passed": 150,
+    "two_device_topology": "POCO M4 Pro 5G Core Mind (10.116.23.168) + Fire TV Stick Lite Glass Terminal (10.116.23.179)",
+    "source_commit": "66b2de9ec98eabe08094b9aa3b9a695954bbc8d5",
+    "dirty_digest": "7bbfaa9a7c1fa6906abbf1fed2c921a76279e5d4f624c796a8655c85c36b0d6f",
+    "git_status": "M core/auth.py\n M core/backup.py\n M core/db.py\n M core/operator_console.py\n M docs/test_inventory.json\n M docs/test_run_artifact.json\n M scripts/generate_test_inventory.py\n M scripts/run_portable_test_suite.py\n M surface/app/src/main/java/com/gathin/tvhome/net/AeonixWebSocketClient.java\n M tests/__init__.py\n M tests/test_boundary_auth_inventory.py\n M tests/test_operator_lockout_failclosed.py\n?? surface/app/src/test/java/com/gathin/tvhome/net/",
+    "runtime": {
+      "python_version": "3.14.8 (main, Oct 18 2026, 13:48:52) [Clang 21.0.0 (https://android.googlesource.com/toolchain/llvm-project 9f872551d",
+      "platform": "Android-13-aarch64-64bit",
+      "machine": "aarch64",
+      "exact_command": "/data/data/com.termux/files/usr/bin/python3 /data/data/com.termux/files/home/aeonix/scripts/run_portable_test_suite.py",
+      "cwd": "/data/data/com.termux/files/home",
+      "pid": 16309
+    },
+    "start_time": "2026-10-31T15:24:09Z",
+    "end_time": "2026-10-31T15:25:14Z",
+    "total_duration_seconds": 65.183,
+    "discovered_tests": 151,
+    "executed_tests": 151,
+    "reconciliation": {
+      "reconciled": true,
+      "missing_from_execution": [],
+      "unexpected_executed": [],
+      "inventory_total": 151,
+      "inventory_reconciled": true
+    },
+    "passed": 151,
     "failed": 0,
     "errors": 0,
-    "pass_rate_percent": 100.0
+    "skipped": 0,
+    "pass_rate_percent": 100.0,
+    "production_isolation": {
+      "verified_unchanged": true,
+      "production_secrets_dir": "/data/data/com.termux/files/home/.aeonix/secrets",
+      "production_db_path": "/data/data/com.termux/files/home/aeonix/data/aeonix_vault.db",
+      "pre_hashes": {
+        "/data/data/com.termux/files/home/.aeonix/secrets/.lockout.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/data/data/com.termux/files/home/.aeonix/secrets/aeonix_cert.pem": "51b8fd33441fd66e63b8deed4c44f53cb325e3d6e337a92466f2ad1246ff00ef",
+        "/data/data/com.termux/files/home/.aeonix/secrets/aeonix_key.pem": "74d138ea98795bf527ea425eb305cd06d0df9adbd4987d65abaf70fedae76b69",
+        "/data/data/com.termux/files/home/.aeonix/secrets/cert_fingerprint.json": "dad7407f134fe5f567c28cd129144202f95908508e6c0a62383ca75ff00fe520",
+        "/data/data/com.termux/files/home/.aeonix/secrets/master_key.json": "8045ff6e4844814a1276328f7288da5c9ebfa173a6aac2610b43408a6152a978",
+        "/data/data/com.termux/files/home/.aeonix/secrets/operator_lockout.json": "0ec15f76fd0008157b90bdbb2c7d05a7e68747568a54c4f997d3cb76c73016de",
+        "/data/data/com.termux/files/home/.aeonix/secrets/operator_pin.json": "27687305e6b31fb6a717567504e80c32bf6931dad12e79d6742d21075e1de5a4",
+        "/data/data/com.termux/files/home/.aeonix/secrets/token_firetv_stick_glass.json": "5929201af690bc14c3da259334d32adc6e3bf5def6ff311714d424c5a3c92cee",
+        "/data/data/com.termux/files/home/.aeonix/secrets/token_poco_m4_pro_core.json": "e2decf2c454bbddf8fa200406d1afe7cabe6996fdc861275e1f6195ff5e298fe",
+        "/data/data/com.termux/files/home/aeonix/data/aeonix_vault.db": "98fd9551f7fd16a80f7a83334ad16663bb8e426a5d64e12742710760e07d307a"
+      },
+      "post_hashes": {
+        "/data/data/com.termux/files/home/.aeonix/secrets/.lockout.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "/data/data/com.termux/files/home/.aeonix/secrets/aeonix_cert.pem": "51b8fd33441fd66e63b8deed4c44f53cb325e3d6e337a92466f2ad1246ff00ef",
+        "/data/data/com.termux/files/home/.aeonix/secrets/aeonix_key.pem": "74d138ea98795bf527ea425eb305cd06d0df9adbd4987d65abaf70fedae76b69",
+        "/data/data/com.termux/files/home/.aeonix/secrets/cert_fingerprint.json": "dad7407f134fe5f567c28cd129144202f95908508e6c0a62383ca75ff00fe520",
+        "/data/data/com.termux/files/home/.aeonix/secrets/master_key.json": "8045ff6e4844814a1276328f7288da5c9ebfa173a6aac2610b43408a6152a978",
+        "/data/data/com.termux/files/home/.aeonix/secrets/operator_lockout.json": "0ec15f76fd0008157b90bdbb2c7d05a7e68747568a54c4f997d3cb76c73016de",
+        "/data/data/com.termux/files/home/.aeonix/secrets/operator_pin.json": "27687305e6b31fb6a717567504e80c32bf6931dad12e79d6742d21075e1de5a4",
+        "/data/data/com.termux/files/home/.aeonix/secrets/token_firetv_stick_glass.json": "5929201af690bc14c3da259334d32adc6e3bf5def6ff311714d424c5a3c92cee",
+        "/data/data/com.termux/files/home/.aeonix/secrets/token_poco_m4_pro_core.json": "e2decf2c454bbddf8fa200406d1afe7cabe6996fdc861275e1f6195ff5e298fe",
+        "/data/data/com.termux/files/home/aeonix/data/aeonix_vault.db": "98fd9551f7fd16a80f7a83334ad16663bb8e426a5d64e12742710760e07d307a"
+      },
+      "mutations": []
+    }
   },
   "test_results": [
     {
       "test_id": "test_agents.TestAgentSystem.test_analyst_correlation",
       "status": "PASS",
-      "duration_seconds": 0.0621,
+      "duration_seconds": 0.0324,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_archivist_timeline",
       "status": "PASS",
-      "duration_seconds": 0.0263,
+      "duration_seconds": 0.0092,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_builder_git",
       "status": "PASS",
-      "duration_seconds": 0.0795,
+      "duration_seconds": 0.1152,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_collector_and_sentinel_hold",
       "status": "PASS",
-      "duration_seconds": 0.0417,
+      "duration_seconds": 0.0647,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_defender_assessment",
       "status": "PASS",
-      "duration_seconds": 1.8855,
+      "duration_seconds": 1.7754,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_forensicator_manifest",
       "status": "PASS",
-      "duration_seconds": 0.0051,
+      "duration_seconds": 0.0034,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_legal_guard_boundaries",
       "status": "PASS",
-      "duration_seconds": 0.0202,
+      "duration_seconds": 0.0153,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_navigator_plan_decomposition",
       "status": "PASS",
-      "duration_seconds": 0.0094,
+      "duration_seconds": 0.0077,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_orchestrator_roster_and_dispatch",
       "status": "PASS",
-      "duration_seconds": 0.1512,
+      "duration_seconds": 0.1462,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_reporter_briefing",
       "status": "PASS",
-      "duration_seconds": 0.0102,
+      "duration_seconds": 0.0096,
       "error": null
     },
     {
       "test_id": "test_agents.TestAgentSystem.test_skeptic_validation",
       "status": "PASS",
-      "duration_seconds": 0.0327,
+      "duration_seconds": 0.0258,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_01_dynamic_route_inventory_default_deny_unauthenticated",
       "status": "PASS",
-      "duration_seconds": 7.2455,
+      "duration_seconds": 7.1319,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_02_public_minimal_liveness_zero_knowledge",
       "status": "PASS",
-      "duration_seconds": 0.0444,
+      "duration_seconds": 0.0366,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_03_authenticated_system_status_poco_authority_only",
       "status": "PASS",
-      "duration_seconds": 0.1748,
+      "duration_seconds": 0.1876,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_04_role_segregation_firetv_glass_restricted",
       "status": "PASS",
-      "duration_seconds": 0.3302,
+      "duration_seconds": 0.4018,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_05_websocket_boundary_query_param_rejection_and_header_acceptance",
       "status": "PASS",
-      "duration_seconds": 0.19,
+      "duration_seconds": 0.1861,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_06_sentinel_lifecycle_starting_state_validation",
       "status": "PASS",
-      "duration_seconds": 0.1183,
+      "duration_seconds": 0.1191,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_07_file_protection_canonical_path_containment_and_options",
       "status": "PASS",
-      "duration_seconds": 0.0473,
+      "duration_seconds": 0.0608,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_08_system_wide_maintenance_mode_lock",
       "status": "PASS",
-      "duration_seconds": 0.0278,
+      "duration_seconds": 0.0421,
       "error": null
     },
     {
       "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_09_operator_console_first_run_lockout_and_digest",
       "status": "PASS",
-      "duration_seconds": 0.9636,
+      "duration_seconds": 1.1739,
       "error": null
     },
     {
-      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_local_llm_benchmark_execution",
-      "status": "PASS",
-      "duration_seconds": 2.2021,
-      "error": null
-    },
-    {
-      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_model_metadata_and_cryptographic_hash",
-      "status": "PASS",
-      "duration_seconds": 0.7323,
-      "error": null
-    },
-    {
-      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_router_caching_behavior",
-      "status": "PASS",
-      "duration_seconds": 2.3309,
-      "error": null
-    },
-    {
-      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_router_status_and_provider_declarations",
-      "status": "PASS",
-      "duration_seconds": 0.0001,
-      "error": null
-    },
-    {
-      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_sovereign_fallback_when_external_cloud_disabled",
-      "status": "PASS",
-      "duration_seconds": 2.4101,
-      "error": null
-    },
-    {
-      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_tier_0_fast_path_routing_latency",
-      "status": "PASS",
-      "duration_seconds": 0.0117,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_aadya_priority_and_radar",
-      "status": "PASS",
-      "duration_seconds": 0.0225,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_atlas_situational_summary",
-      "status": "PASS",
-      "duration_seconds": 2.5853,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_blackbox_flight_recorder",
-      "status": "PASS",
-      "duration_seconds": 0.014,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_chronos_routines",
-      "status": "PASS",
-      "duration_seconds": 0.0741,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_chronoscope_audit_replay",
-      "status": "PASS",
-      "duration_seconds": 0.0109,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_dreamcatcher_incubate",
-      "status": "PASS",
-      "duration_seconds": 0.0253,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_forge_mind_propose_tool",
-      "status": "PASS",
-      "duration_seconds": 0.0444,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_ghost_digital_twin_and_fault",
-      "status": "PASS",
-      "duration_seconds": 0.0463,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_identity_exposure",
-      "status": "PASS",
-      "duration_seconds": 13.292,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_lumen_living_surface",
-      "status": "PASS",
-      "duration_seconds": 0.0204,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_mimic_workflow_clone",
-      "status": "PASS",
-      "duration_seconds": 0.02,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_nexus_room_celestial_universe",
-      "status": "PASS",
-      "duration_seconds": 0.0188,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_oracle_research",
-      "status": "PASS",
-      "duration_seconds": 0.0676,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_paradox_decision_replay",
-      "status": "PASS",
-      "duration_seconds": 0.0156,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_signal_pattern_detector",
-      "status": "PASS",
-      "duration_seconds": 0.1097,
-      "error": null
-    },
-    {
-      "test_id": "test_master_system.TestMasterSystemEngines.test_trust_signed_orders_and_kill_switch",
-      "status": "PASS",
-      "duration_seconds": 0.0792,
-      "error": null
-    },
-    {
-      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_01_narrow_fs_allowlist_positive_containment",
-      "status": "PASS",
-      "duration_seconds": 0.0383,
-      "error": null
-    },
-    {
-      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_02_allowlist_root_deletion_prohibited",
-      "status": "PASS",
-      "duration_seconds": 0.0508,
-      "error": null
-    },
-    {
-      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_03_agent_state_directories_protected",
-      "status": "PASS",
-      "duration_seconds": 0.0741,
-      "error": null
-    },
-    {
-      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_04_pre_gate_target_outside_allowlist_rejected",
-      "status": "PASS",
-      "duration_seconds": 0.0332,
-      "error": null
-    },
-    {
-      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_05_post_claim_target_outside_allowlist_finalizes_claim",
-      "status": "PASS",
-      "duration_seconds": 0.0879,
-      "error": null
-    },
-    {
-      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_06_successful_execution_finalizes_claim_as_completed",
-      "status": "PASS",
-      "duration_seconds": 0.1129,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_01_forged_or_invalid_token_rejected",
-      "status": "PASS",
-      "duration_seconds": 0.0008,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_02_firetv_approval_attempt_rejected",
-      "status": "PASS",
-      "duration_seconds": 0.042,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_03_altered_target_mismatch_rejected",
-      "status": "PASS",
-      "duration_seconds": 0.0328,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_04_sentinel_replay_rejected_atomically_consumed",
-      "status": "PASS",
-      "duration_seconds": 0.0471,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_05_expired_approval_rejected",
-      "status": "PASS",
-      "duration_seconds": 1.2353,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_06_execution_blocked_in_sanctuary_mode",
-      "status": "PASS",
-      "duration_seconds": 0.065,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_07_protected_resource_removal_rejected",
-      "status": "PASS",
-      "duration_seconds": 0.0065,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_08_scope_mismatch_arguments_and_cwd_rejected",
-      "status": "PASS",
-      "duration_seconds": 0.0305,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_09_protected_resource_removal_rejected_under_valid_approval",
-      "status": "PASS",
-      "duration_seconds": 0.0465,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_10_execution_lifecycle_state_transitions",
-      "status": "PASS",
-      "duration_seconds": 0.0428,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_11_rest_api_auth_rejection_and_role_enforcement",
-      "status": "PASS",
-      "duration_seconds": 0.2209,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_12_websocket_unauthenticated_handshake_rejected",
-      "status": "PASS",
-      "duration_seconds": 0.1534,
-      "error": null
-    },
-    {
-      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_13_maintenance_mode_and_automatic_restore_rollback",
-      "status": "PASS",
-      "duration_seconds": 0.1663,
-      "error": null
-    },
-    {
-      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_01_atomic_write_creates_valid_json",
-      "status": "PASS",
-      "duration_seconds": 0.4718,
-      "error": null
-    },
-    {
-      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_02_corrupted_lockout_file_fails_closed",
-      "status": "PASS",
-      "duration_seconds": 0.276,
-      "error": null
-    },
-    {
-      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_03_lockout_persists_across_restarts",
-      "status": "PASS",
-      "duration_seconds": 0.2804,
-      "error": null
-    },
-    {
-      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_04_deliberate_physical_reset_requires_confirmation",
-      "status": "PASS",
-      "duration_seconds": 0.2782,
-      "error": null
-    },
-    {
-      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_05_concurrent_lockout_updates_thread_safe",
-      "status": "PASS",
-      "duration_seconds": 0.3414,
-      "error": null
-    },
-    {
-      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_06_verifiable_reset_revocation_details",
-      "status": "PASS",
-      "duration_seconds": 0.3636,
-      "error": null
-    },
-    {
-      "test_id": "test_phase3.TestPhase3Arsenal.test_atlas_watch_supervisor",
-      "status": "PASS",
-      "duration_seconds": 0.2319,
-      "error": null
-    },
-    {
-      "test_id": "test_phase3.TestPhase3Arsenal.test_fast_path_arsenal_triggers",
-      "status": "PASS",
-      "duration_seconds": 1.969,
-      "error": null
-    },
-    {
-      "test_id": "test_phase3.TestPhase3Arsenal.test_guardian_subnet_discovery",
-      "status": "PASS",
-      "duration_seconds": 0.758,
-      "error": null
-    },
-    {
-      "test_id": "test_phase3.TestPhase3Arsenal.test_panoptes_graph_and_sentinel",
-      "status": "PASS",
-      "duration_seconds": 0.0424,
-      "error": null
-    },
-    {
-      "test_id": "test_phase3.TestPhase3Arsenal.test_veritas_forensics_and_tamper_detection",
-      "status": "PASS",
-      "duration_seconds": 0.0491,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4.TestPhase4CinemaAndSanctuary.test_fast_path_cinema_and_sanctuary_triggers",
-      "status": "PASS",
-      "duration_seconds": 0.0372,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4.TestPhase4CinemaAndSanctuary.test_sanctuary_lockdown_cycle",
-      "status": "PASS",
-      "duration_seconds": 0.0475,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4.TestPhase4CinemaAndSanctuary.test_spectra_channel_catalog_and_search",
-      "status": "PASS",
-      "duration_seconds": 0.0182,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_entity_graph_upsert_and_traversal",
-      "status": "PASS",
-      "duration_seconds": 0.0494,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_guardian_single_host_probe",
-      "status": "PASS",
-      "duration_seconds": 0.0109,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_guardian_subnet_inventory_and_classification",
-      "status": "PASS",
-      "duration_seconds": 1.2049,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_panoptes_osint_report_generator",
-      "status": "PASS",
-      "duration_seconds": 0.0491,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_passive_dns_and_http_fingerprint",
-      "status": "PASS",
-      "duration_seconds": 0.018,
-      "error": null
-    },
-    {
-      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_sentinel_gate_holds_active_network_probes",
-      "status": "PASS",
-      "duration_seconds": 0.0137,
-      "error": null
-    },
-    {
-      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_fast_path_forge_triggers",
-      "status": "PASS",
-      "duration_seconds": 0.0731,
-      "error": null
-    },
-    {
-      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_forge_draft_and_risk_assessment",
-      "status": "PASS",
-      "duration_seconds": 0.0002,
-      "error": null
-    },
-    {
-      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_forge_git_telemetry",
-      "status": "PASS",
-      "duration_seconds": 0.0693,
-      "error": null
-    },
-    {
-      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_forge_sandboxed_execution_and_sentinel_hold",
-      "status": "PASS",
-      "duration_seconds": 0.0817,
-      "error": null
-    },
-    {
-      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_visia_forensic_analysis_and_ocr",
-      "status": "PASS",
-      "duration_seconds": 0.5536,
-      "error": null
-    },
-    {
-      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_git_telemetry_live",
-      "status": "PASS",
-      "duration_seconds": 0.073,
-      "error": null
-    },
-    {
-      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_natural_language_drafting_and_risk",
+      "test_id": "test_boundary_auth_inventory.TestBoundaryAuthInventory.test_10_production_paths_strictly_refused_in_test_mode",
       "status": "PASS",
       "duration_seconds": 0.0003,
       "error": null
     },
     {
-      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_sandboxed_safe_execution",
+      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_local_llm_benchmark_execution",
       "status": "PASS",
-      "duration_seconds": 0.0498,
+      "duration_seconds": 3.0235,
       "error": null
     },
     {
-      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_sentinel_hold_on_consequential_operations",
+      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_model_metadata_and_cryptographic_hash",
       "status": "PASS",
-      "duration_seconds": 0.0355,
+      "duration_seconds": 0.8594,
       "error": null
     },
     {
-      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_veritas_case_lifecycle_and_immutable_evidence",
+      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_router_caching_behavior",
       "status": "PASS",
-      "duration_seconds": 0.07,
+      "duration_seconds": 2.7872,
       "error": null
     },
     {
-      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_veritas_chronological_timeline_builder",
+      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_router_status_and_provider_declarations",
       "status": "PASS",
-      "duration_seconds": 0.0722,
+      "duration_seconds": 0.0003,
       "error": null
     },
     {
-      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_veritas_forensic_report_export",
+      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_sovereign_fallback_when_external_cloud_disabled",
       "status": "PASS",
-      "duration_seconds": 0.1004,
+      "duration_seconds": 2.2368,
       "error": null
     },
     {
-      "test_id": "test_phase6.TestPhase6SovereignMesh.test_backup_create_and_verify",
+      "test_id": "test_hybrid_router_and_ai.TestHybridRouterAndAI.test_tier_0_fast_path_routing_latency",
       "status": "PASS",
-      "duration_seconds": 0.5567,
+      "duration_seconds": 0.0134,
       "error": null
     },
     {
-      "test_id": "test_phase6.TestPhase6SovereignMesh.test_emergency_recovery_key",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_aadya_priority_and_radar",
       "status": "PASS",
-      "duration_seconds": 0.0001,
+      "duration_seconds": 0.0258,
       "error": null
     },
     {
-      "test_id": "test_phase6.TestPhase6SovereignMesh.test_fast_path_phase6_triggers",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_atlas_situational_summary",
       "status": "PASS",
-      "duration_seconds": 0.1905,
+      "duration_seconds": 2.1548,
       "error": null
     },
     {
-      "test_id": "test_phase6.TestPhase6SovereignMesh.test_morph_self_evolution_guardrails",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_blackbox_flight_recorder",
       "status": "PASS",
-      "duration_seconds": 0.0403,
+      "duration_seconds": 0.0145,
       "error": null
     },
     {
-      "test_id": "test_phase6.TestPhase6SovereignMesh.test_oracle_council_adversarial_session",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_chronos_routines",
       "status": "PASS",
-      "duration_seconds": 0.0066,
+      "duration_seconds": 0.0517,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_01_db_level_bearer_alone_approval_rejected",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_chronoscope_audit_replay",
       "status": "PASS",
-      "duration_seconds": 0.3052,
+      "duration_seconds": 0.0063,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_02_db_level_approval_with_verified_passphrase_succeeds",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_dreamcatcher_incubate",
       "status": "PASS",
-      "duration_seconds": 0.2895,
+      "duration_seconds": 0.0201,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_03_db_level_digest_tampering_rejected",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_forge_mind_propose_tool",
       "status": "PASS",
-      "duration_seconds": 0.2885,
+      "duration_seconds": 0.0292,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_04_db_level_missing_or_empty_digest_rejected",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_ghost_digital_twin_and_fault",
       "status": "PASS",
-      "duration_seconds": 0.3016,
+      "duration_seconds": 0.0416,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_05_api_level_poco_bearer_alone_without_passphrase_rejected",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_identity_exposure",
       "status": "PASS",
-      "duration_seconds": 0.3276,
+      "duration_seconds": 13.0778,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_06_api_level_poco_bearer_with_wrong_passphrase_rejected",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_lumen_living_surface",
       "status": "PASS",
-      "duration_seconds": 0.6743,
+      "duration_seconds": 0.0147,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_07_api_level_missing_action_digest_rejected",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_mimic_workflow_clone",
       "status": "PASS",
-      "duration_seconds": 0.7727,
+      "duration_seconds": 0.0204,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_08_api_level_valid_passphrase_and_matching_digest_succeeds",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_nexus_room_celestial_universe",
       "status": "PASS",
-      "duration_seconds": 0.7975,
+      "duration_seconds": 0.0236,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_09_firetv_glass_cannot_approve",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_oracle_research",
       "status": "PASS",
-      "duration_seconds": 0.5401,
+      "duration_seconds": 0.0596,
       "error": null
     },
     {
-      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_10_tls_and_pinned_handshake_negative_validation",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_paradox_decision_replay",
       "status": "PASS",
-      "duration_seconds": 0.3072,
+      "duration_seconds": 0.0141,
       "error": null
     },
     {
-      "test_id": "test_restore_coordination_and_writer_lock.TestRestoreCoordinationAndWriterLock.test_01_active_writer_blocked_during_maintenance",
+      "test_id": "test_master_system.TestMasterSystemEngines.test_signal_pattern_detector",
+      "status": "PASS",
+      "duration_seconds": 0.0444,
+      "error": null
+    },
+    {
+      "test_id": "test_master_system.TestMasterSystemEngines.test_trust_signed_orders_and_kill_switch",
+      "status": "PASS",
+      "duration_seconds": 0.0645,
+      "error": null
+    },
+    {
+      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_01_narrow_fs_allowlist_positive_containment",
+      "status": "PASS",
+      "duration_seconds": 0.0309,
+      "error": null
+    },
+    {
+      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_02_allowlist_root_deletion_prohibited",
+      "status": "PASS",
+      "duration_seconds": 0.033,
+      "error": null
+    },
+    {
+      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_03_agent_state_directories_protected",
+      "status": "PASS",
+      "duration_seconds": 0.0537,
+      "error": null
+    },
+    {
+      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_04_pre_gate_target_outside_allowlist_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.0347,
+      "error": null
+    },
+    {
+      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_05_post_claim_target_outside_allowlist_finalizes_claim",
+      "status": "PASS",
+      "duration_seconds": 0.084,
+      "error": null
+    },
+    {
+      "test_id": "test_narrow_fs_allowlist.TestNarrowFsAllowlistAndClaimFinalization.test_06_successful_execution_finalizes_claim_as_completed",
+      "status": "PASS",
+      "duration_seconds": 0.132,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_01_forged_or_invalid_token_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.0014,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_02_firetv_approval_attempt_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.0302,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_03_altered_target_mismatch_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.0413,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_04_sentinel_replay_rejected_atomically_consumed",
       "status": "PASS",
       "duration_seconds": 0.0424,
       "error": null
     },
     {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_05_expired_approval_rejected",
+      "status": "PASS",
+      "duration_seconds": 1.241,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_06_execution_blocked_in_sanctuary_mode",
+      "status": "PASS",
+      "duration_seconds": 0.0783,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_07_protected_resource_removal_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.016,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_08_scope_mismatch_arguments_and_cwd_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.0516,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_09_protected_resource_removal_rejected_under_valid_approval",
+      "status": "PASS",
+      "duration_seconds": 0.0593,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_10_execution_lifecycle_state_transitions",
+      "status": "PASS",
+      "duration_seconds": 0.0435,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_11_rest_api_auth_rejection_and_role_enforcement",
+      "status": "PASS",
+      "duration_seconds": 0.2549,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_12_websocket_unauthenticated_handshake_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.1507,
+      "error": null
+    },
+    {
+      "test_id": "test_negative_security_and_auth.TestNegativeSecurityAndAuth.test_13_maintenance_mode_and_automatic_restore_rollback",
+      "status": "PASS",
+      "duration_seconds": 0.2291,
+      "error": null
+    },
+    {
+      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_01_atomic_write_creates_valid_json",
+      "status": "PASS",
+      "duration_seconds": 0.8517,
+      "error": null
+    },
+    {
+      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_02_corrupted_lockout_file_fails_closed",
+      "status": "PASS",
+      "duration_seconds": 0.3407,
+      "error": null
+    },
+    {
+      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_03_lockout_persists_across_restarts",
+      "status": "PASS",
+      "duration_seconds": 0.335,
+      "error": null
+    },
+    {
+      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_04_deliberate_physical_reset_requires_confirmation",
+      "status": "PASS",
+      "duration_seconds": 0.3336,
+      "error": null
+    },
+    {
+      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_05_concurrent_lockout_updates_thread_safe",
+      "status": "PASS",
+      "duration_seconds": 0.4062,
+      "error": null
+    },
+    {
+      "test_id": "test_operator_lockout_failclosed.TestOperatorLockoutFailClosed.test_06_verifiable_reset_invalidates_credentials_sessions_and_approvals",
+      "status": "PASS",
+      "duration_seconds": 0.4871,
+      "error": null
+    },
+    {
+      "test_id": "test_phase3.TestPhase3Arsenal.test_atlas_watch_supervisor",
+      "status": "PASS",
+      "duration_seconds": 0.317,
+      "error": null
+    },
+    {
+      "test_id": "test_phase3.TestPhase3Arsenal.test_fast_path_arsenal_triggers",
+      "status": "PASS",
+      "duration_seconds": 2.0005,
+      "error": null
+    },
+    {
+      "test_id": "test_phase3.TestPhase3Arsenal.test_guardian_subnet_discovery",
+      "status": "PASS",
+      "duration_seconds": 1.9114,
+      "error": null
+    },
+    {
+      "test_id": "test_phase3.TestPhase3Arsenal.test_panoptes_graph_and_sentinel",
+      "status": "PASS",
+      "duration_seconds": 0.0466,
+      "error": null
+    },
+    {
+      "test_id": "test_phase3.TestPhase3Arsenal.test_veritas_forensics_and_tamper_detection",
+      "status": "PASS",
+      "duration_seconds": 0.0426,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4.TestPhase4CinemaAndSanctuary.test_fast_path_cinema_and_sanctuary_triggers",
+      "status": "PASS",
+      "duration_seconds": 0.0579,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4.TestPhase4CinemaAndSanctuary.test_sanctuary_lockdown_cycle",
+      "status": "PASS",
+      "duration_seconds": 0.0501,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4.TestPhase4CinemaAndSanctuary.test_spectra_channel_catalog_and_search",
+      "status": "PASS",
+      "duration_seconds": 0.0253,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_entity_graph_upsert_and_traversal",
+      "status": "PASS",
+      "duration_seconds": 0.0568,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_guardian_single_host_probe",
+      "status": "PASS",
+      "duration_seconds": 0.012,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_guardian_subnet_inventory_and_classification",
+      "status": "PASS",
+      "duration_seconds": 1.7747,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_panoptes_osint_report_generator",
+      "status": "PASS",
+      "duration_seconds": 0.077,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_passive_dns_and_http_fingerprint",
+      "status": "PASS",
+      "duration_seconds": 0.025,
+      "error": null
+    },
+    {
+      "test_id": "test_phase4_panoptes_guardian.TestPhase4PanoptesAndGuardian.test_sentinel_gate_holds_active_network_probes",
+      "status": "PASS",
+      "duration_seconds": 0.022,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_fast_path_forge_triggers",
+      "status": "PASS",
+      "duration_seconds": 0.0852,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_forge_draft_and_risk_assessment",
+      "status": "PASS",
+      "duration_seconds": 0.0004,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_forge_git_telemetry",
+      "status": "PASS",
+      "duration_seconds": 0.0747,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_forge_sandboxed_execution_and_sentinel_hold",
+      "status": "PASS",
+      "duration_seconds": 0.0875,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5.TestPhase5ForgeAndVisia.test_visia_forensic_analysis_and_ocr",
+      "status": "PASS",
+      "duration_seconds": 0.5914,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_git_telemetry_live",
+      "status": "PASS",
+      "duration_seconds": 0.0864,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_natural_language_drafting_and_risk",
+      "status": "PASS",
+      "duration_seconds": 0.0004,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_sandboxed_safe_execution",
+      "status": "PASS",
+      "duration_seconds": 0.0668,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_forge_sentinel_hold_on_consequential_operations",
+      "status": "PASS",
+      "duration_seconds": 0.038,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_veritas_case_lifecycle_and_immutable_evidence",
+      "status": "PASS",
+      "duration_seconds": 0.0818,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_veritas_chronological_timeline_builder",
+      "status": "PASS",
+      "duration_seconds": 0.0552,
+      "error": null
+    },
+    {
+      "test_id": "test_phase5_veritas_forge.TestPhase5VeritasAndForge.test_veritas_forensic_report_export",
+      "status": "PASS",
+      "duration_seconds": 0.0682,
+      "error": null
+    },
+    {
+      "test_id": "test_phase6.TestPhase6SovereignMesh.test_backup_create_and_verify",
+      "status": "PASS",
+      "duration_seconds": 0.1051,
+      "error": null
+    },
+    {
+      "test_id": "test_phase6.TestPhase6SovereignMesh.test_emergency_recovery_key",
+      "status": "PASS",
+      "duration_seconds": 0.0003,
+      "error": null
+    },
+    {
+      "test_id": "test_phase6.TestPhase6SovereignMesh.test_fast_path_phase6_triggers",
+      "status": "PASS",
+      "duration_seconds": 0.0692,
+      "error": null
+    },
+    {
+      "test_id": "test_phase6.TestPhase6SovereignMesh.test_morph_self_evolution_guardrails",
+      "status": "PASS",
+      "duration_seconds": 0.0481,
+      "error": null
+    },
+    {
+      "test_id": "test_phase6.TestPhase6SovereignMesh.test_oracle_council_adversarial_session",
+      "status": "PASS",
+      "duration_seconds": 0.0081,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_01_db_level_bearer_alone_approval_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.4517,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_02_db_level_approval_with_verified_passphrase_succeeds",
+      "status": "PASS",
+      "duration_seconds": 0.3673,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_03_db_level_digest_tampering_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.3462,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_04_db_level_missing_or_empty_digest_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.4081,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_05_api_level_poco_bearer_alone_without_passphrase_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.3634,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_06_api_level_poco_bearer_with_wrong_passphrase_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.7973,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_07_api_level_missing_action_digest_rejected",
+      "status": "PASS",
+      "duration_seconds": 0.9228,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_08_api_level_valid_passphrase_and_matching_digest_succeeds",
+      "status": "PASS",
+      "duration_seconds": 0.9342,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_09_firetv_glass_cannot_approve",
+      "status": "PASS",
+      "duration_seconds": 0.6099,
+      "error": null
+    },
+    {
+      "test_id": "test_poco_bearer_bypass_and_digest.TestPocoBearerBypassAndDigestBinding.test_10_tls_and_pinned_handshake_negative_validation",
+      "status": "PASS",
+      "duration_seconds": 0.4989,
+      "error": null
+    },
+    {
+      "test_id": "test_restore_coordination_and_writer_lock.TestRestoreCoordinationAndWriterLock.test_01_active_writer_blocked_during_maintenance",
+      "status": "PASS",
+      "duration_seconds": 0.0427,
+      "error": null
+    },
+    {
       "test_id": "test_restore_coordination_and_writer_lock.TestRestoreCoordinationAndWriterLock.test_02_overlapping_restore_blocked",
       "status": "PASS",
-      "duration_seconds": 0.0429,
+      "duration_seconds": 0.053,
       "error": null
     },
     {
       "test_id": "test_restore_coordination_and_writer_lock.TestRestoreCoordinationAndWriterLock.test_03_clean_restore_and_maintenance_release",
       "status": "PASS",
-      "duration_seconds": 0.0735,
+      "duration_seconds": 0.1096,
       "error": null
     },
     {
       "test_id": "test_restore_coordination_and_writer_lock.TestRestoreCoordinationAndWriterLock.test_04_active_writer_causes_quiescence_failure_and_aborts_restore",
       "status": "PASS",
-      "duration_seconds": 5.6213,
+      "duration_seconds": 5.6397,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_auth_token_expiration",
       "status": "PASS",
-      "duration_seconds": 0.0578,
+      "duration_seconds": 0.0665,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_auth_token_issuance_and_verification",
       "status": "PASS",
-      "duration_seconds": 0.0642,
+      "duration_seconds": 0.0552,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_auth_token_revocation",
       "status": "PASS",
-      "duration_seconds": 0.1048,
+      "duration_seconds": 0.0696,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_auth_token_tampering_rejected",
       "status": "PASS",
-      "duration_seconds": 0.0538,
+      "duration_seconds": 0.0361,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_cryptographic_signed_execution_order",
       "status": "PASS",
-      "duration_seconds": 0.0962,
+      "duration_seconds": 0.0594,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_firetv_safe_denial_permitted",
       "status": "PASS",
-      "duration_seconds": 0.0913,
+      "duration_seconds": 0.0675,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_forge_consequential_operation_sentinel_hold",
       "status": "PASS",
-      "duration_seconds": 0.0902,
+      "duration_seconds": 0.0594,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_forge_metacharacter_injection_rejected",
       "status": "PASS",
-      "duration_seconds": 0.0654,
+      "duration_seconds": 0.0533,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_forge_typed_execution_safe",
       "status": "PASS",
-      "duration_seconds": 0.1357,
+      "duration_seconds": 0.116,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_persistent_kill_switch_blocks_operations",
       "status": "PASS",
-      "duration_seconds": 0.1667,
+      "duration_seconds": 0.0943,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_poco_only_approval_authority",
       "status": "PASS",
-      "duration_seconds": 0.1069,
+      "duration_seconds": 0.0775,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_sanctuary_mode_persistence_and_policy",
       "status": "PASS",
-      "duration_seconds": 0.1337,
+      "duration_seconds": 0.0856,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_sentinel_rejection_of_already_resolved",
       "status": "PASS",
-      "duration_seconds": 0.1114,
+      "duration_seconds": 0.0723,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_sentinel_rejection_of_expired_request",
       "status": "PASS",
-      "duration_seconds": 0.0913,
+      "duration_seconds": 0.0631,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_sentinel_strict_boolean_validation",
       "status": "PASS",
-      "duration_seconds": 0.078,
+      "duration_seconds": 0.059,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_signed_order_replay_attack_prevention",
       "status": "PASS",
-      "duration_seconds": 0.1182,
+      "duration_seconds": 0.074,
       "error": null
     },
     {
       "test_id": "test_stage1_security.TestStage1Security.test_signed_order_tampering_detected",
       "status": "PASS",
-      "duration_seconds": 0.0803,
+      "duration_seconds": 0.0613,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_aadya_priority_with_hardware_context",
       "status": "PASS",
-      "duration_seconds": 0.0891,
+      "duration_seconds": 0.0539,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_analyst_semantic_entity_linking",
       "status": "PASS",
-      "duration_seconds": 0.0949,
+      "duration_seconds": 0.0595,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_audit_chain_full_cryptographic_verification",
       "status": "PASS",
-      "duration_seconds": 0.406,
+      "duration_seconds": 0.008,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_audit_chain_tamper_detection",
       "status": "PASS",
-      "duration_seconds": 0.069,
+      "duration_seconds": 0.0712,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_builder_and_forge_schema_alignment",
       "status": "PASS",
-      "duration_seconds": 0.0528,
+      "duration_seconds": 0.087,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_council_adversarial_deliberation",
       "status": "PASS",
-      "duration_seconds": 0.0185,
+      "duration_seconds": 0.0276,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_ghost_telemetry_and_stated_assumptions",
       "status": "PASS",
-      "duration_seconds": 0.0432,
+      "duration_seconds": 0.0398,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_nexus_room_live_synchronization",
       "status": "PASS",
-      "duration_seconds": 0.0073,
+      "duration_seconds": 0.0165,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_oracle_multi_source_and_prediction_ledger",
       "status": "PASS",
-      "duration_seconds": 0.0384,
+      "duration_seconds": 0.0667,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_orchestrator_state_persistence_and_stage_failure_halt",
       "status": "PASS",
-      "duration_seconds": 2.1145,
+      "duration_seconds": 1.9813,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_paradox_quantified_hardware_modeling",
       "status": "PASS",
-      "duration_seconds": 0.0109,
+      "duration_seconds": 0.0098,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_shared_request_pipeline_fast_path_and_concurrency",
       "status": "PASS",
-      "duration_seconds": 0.0479,
+      "duration_seconds": 0.0272,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_signal_dynamic_anomaly_detection",
       "status": "PASS",
-      "duration_seconds": 0.057,
+      "duration_seconds": 0.0297,
       "error": null
     },
     {
       "test_id": "test_stage2_correctness.TestStage2BackendCorrectness.test_skeptic_adversarial_evidence_evaluation",
       "status": "PASS",
-      "duration_seconds": 0.015,
+      "duration_seconds": 0.0072,
       "error": null
     },
     {
       "test_id": "test_stage3_disaster_recovery.TestStage3DisasterRecovery.test_backup_verification_and_hash_comparison",
       "status": "PASS",
-      "duration_seconds": 0.5755,
+      "duration_seconds": 0.0917,
       "error": null
     },
     {
       "test_id": "test_stage3_disaster_recovery.TestStage3DisasterRecovery.test_emergency_recovery_key",
       "status": "PASS",
-      "duration_seconds": 0.0001,
+      "duration_seconds": 0.0002,
       "error": null
     },
     {
       "test_id": "test_stage3_disaster_recovery.TestStage3DisasterRecovery.test_encrypted_backup_creation_and_manifest",
       "status": "PASS",
-      "duration_seconds": 0.1498,
+      "duration_seconds": 0.0619,
       "error": null
     },
     {
       "test_id": "test_stage3_disaster_recovery.TestStage3DisasterRecovery.test_isolated_disaster_recovery_restore",
       "status": "PASS",
-      "duration_seconds": 0.5467,
+      "duration_seconds": 0.1661,
       "error": null
     },
     {
@@ -902,13 +959,13 @@
     {
       "test_id": "test_stage3_disaster_recovery.TestStage3DisasterRecovery.test_storage_retention_enforcement",
       "status": "PASS",
-      "duration_seconds": 0.0015,
+      "duration_seconds": 0.0017,
       "error": null
     },
     {
       "test_id": "test_stage3_disaster_recovery.TestStage3DisasterRecovery.test_tampered_backup_rejection",
       "status": "PASS",
-      "duration_seconds": 0.19,
+      "duration_seconds": 0.0781,
       "error": null
     }
   ]

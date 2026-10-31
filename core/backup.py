@@ -403,13 +403,15 @@ def verify_backup(archive_path: str, recovery_passphrase: Optional[str] = None, 
         shutil.rmtree(verify_dir, ignore_errors=True)
 
 
-def _quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[bool, Optional[str]]:
+def _quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[Optional[sqlite3.Connection], Optional[str]]:
     """
-    Stops and drains active SQLite writers, verifies WAL checkpointing, and enforces quiescence.
-    Returns (True, None) if quiescence is successfully achieved, or (False, error_msg) to abort restore.
+    Enforces continuous database quiescence: stops and drains active SQLite writers,
+    verifies WAL checkpointing, acquires an exclusive lock connection, and HOLDS IT.
+    Returns (held_connection, None) if quiescence is successfully achieved and held,
+    or (None, error_msg) if active writers could not be drained within timeout.
     """
     if not os.path.exists(target_db_path):
-        return True, None
+        return None, None
 
     t0 = time.time()
     while time.time() - t0 < timeout:
@@ -424,10 +426,9 @@ def _quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[bool, 
                 time.sleep(0.1)
                 continue
 
-            conn.execute("BEGIN EXCLUSIVE;")
-            conn.execute("COMMIT;")
-            conn.close()
-            return True, None
+            # Return the active held connection; DO NOT commit or close it!
+            # The exclusive lock remains held continuously until restore completes.
+            return conn, None
         except sqlite3.OperationalError:
             if conn:
                 try:
@@ -441,9 +442,9 @@ def _quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[bool, 
                     conn.close()
                 except Exception:
                     pass
-            return False, f"QUIESCENCE_ERROR: {str(e)}"
+            return None, f"QUIESCENCE_ERROR: {str(e)}"
 
-    return False, "QUIESCENCE_TIMEOUT: Active database writers failed to drain within timeout"
+    return None, "QUIESCENCE_TIMEOUT: Active database writers failed to drain within timeout"
 
 
 def restore_vault_backup(
@@ -537,10 +538,11 @@ def restore_vault_backup(
             manifest = json.load(f)
         extracted_db = os.path.join(restore_dir, manifest.get("db_file", "aeonix_vault.db"))
 
-        # Step 2: Stop/drain existing writers & enforce database quiescence (Item 3)
+        # Step 2: Stop/drain existing writers & enforce continuous database quiescence (Requirement 1)
+        held_conn = None
         if os.path.exists(target_db_path):
-            quiesced, quiesce_err = _quiesce_database(target_db_path, timeout=5.0)
-            if not quiesced:
+            held_conn, quiesce_err = _quiesce_database(target_db_path, timeout=5.0)
+            if quiesce_err:
                 return {
                     "success": False,
                     "status": "RESTORE_ABORTED_QUIESCENCE_FAILED",
@@ -555,20 +557,23 @@ def restore_vault_backup(
                 if os.path.exists(wf):
                     shutil.copy2(wf, os.path.join(safety_dir, f"vault{suffix}.bak"))
 
-        # Clean lingering WAL/SHM before atomic file replacement
-        for suffix in ["-wal", "-shm"]:
-            wal_file = f"{target_db_path}{suffix}"
-            if os.path.exists(wal_file):
-                try:
-                    os.remove(wal_file)
-                except Exception:
-                    pass
-
-        # Atomic replacement via temporary file and os.replace
-        os.makedirs(os.path.dirname(os.path.abspath(target_db_path)), exist_ok=True)
-        temp_restoring = f"{target_db_path}.tmp_restoring"
-        shutil.copy2(extracted_db, temp_restoring)
-        os.replace(temp_restoring, target_db_path)
+        # Restore database directly while holding continuous quiescence
+        if held_conn is not None:
+            try:
+                src_conn = sqlite3.connect(extracted_db)
+                src_conn.backup(held_conn)
+                src_conn.close()
+                held_conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                held_conn.commit()
+            finally:
+                held_conn.close()
+                held_conn = None
+        else:
+            # Target DB did not exist; safely copy into place
+            os.makedirs(os.path.dirname(os.path.abspath(target_db_path)), exist_ok=True)
+            temp_restoring = f"{target_db_path}.tmp_restoring"
+            shutil.copy2(extracted_db, temp_restoring)
+            os.replace(temp_restoring, target_db_path)
 
         # Step 3: Post-restore verification check on active target DB
         post_check = verify_audit_chain(target_db_path, allow_maintenance=True)

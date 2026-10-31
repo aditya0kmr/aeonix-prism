@@ -221,7 +221,7 @@ def reset_operator_credentials(
         except Exception:
             pass
 
-    # Revoke operator and pairing tokens in DB and collect nonces
+    # Revoke operator and pairing tokens in DB and collect nonces (Sessions Invalidation)
     revoked_nonces = []
     try:
         import base64
@@ -249,6 +249,26 @@ def reset_operator_credentials(
     except Exception:
         pass
 
+    # Revoke all outstanding (pending/approved) Sentinel approvals (Approvals Invalidation)
+    revoked_approval_ids = []
+    try:
+        conn = get_connection(d_path, allow_maintenance=True)
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM sentinel_requests WHERE status IN ('pending', 'approved');")
+        rows = cur.fetchall()
+        for r in rows:
+            req_id = r["id"] if isinstance(r, sqlite3.Row) else r[0]
+            revoked_approval_ids.append(req_id)
+        if revoked_approval_ids:
+            cur.execute(
+                "UPDATE sentinel_requests SET status = 'revoked', error_msg = 'REVOKED_DUE_TO_OPERATOR_RESET', completed_at = ? WHERE status IN ('pending', 'approved');",
+                (time.time(),)
+            )
+            conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
     audit_hash = log_audit_event(
         actor="OPERATOR",
         action="reset_operator_credentials",
@@ -257,7 +277,11 @@ def reset_operator_credentials(
         details={
             "reason": "deliberate_physical_reset",
             "revoked_tokens_count": len(revoked_nonces),
-            "revoked_nonces": revoked_nonces
+            "revoked_nonces": revoked_nonces,
+            "revoked_approvals_count": len(revoked_approval_ids),
+            "revoked_approval_ids": revoked_approval_ids,
+            "pin_removed": pin_removed,
+            "lockout_cleared": lockout_cleared
         },
         db_path=d_path,
         allow_maintenance=True
@@ -265,9 +289,11 @@ def reset_operator_credentials(
 
     return ResetResult({
         "success": True,
-        "message": "RESET_SUCCESSFUL: Operator credentials reset. Console returned to first-run setup state.",
+        "message": "RESET_SUCCESSFUL: Operator credentials, active sessions, and pending approvals invalidated. Console returned to first-run setup state.",
         "revoked_tokens_count": len(revoked_nonces),
         "revoked_nonces": revoked_nonces,
+        "revoked_approvals_count": len(revoked_approval_ids),
+        "revoked_approval_ids": revoked_approval_ids,
         "audit_hash": audit_hash,
         "pin_removed": pin_removed,
         "lockout_cleared": lockout_cleared

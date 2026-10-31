@@ -415,6 +415,32 @@ class TestBoundaryAuthInventory(unittest.TestCase):
         finally:
             shutil.rmtree(sec_dir, ignore_errors=True)
 
+    def test_10_production_paths_strictly_refused_in_test_mode(self):
+        """In test mode (AEONIX_TEST_MODE=1), attempting to resolve production paths raises PermissionError."""
+        from aeonix.core.auth import get_secrets_dir, PROD_SECRETS_DIR
+        from aeonix.core.db import get_db_path, PROD_DB_PATH
+
+        orig_sec = os.environ.get("AEONIX_SECRETS_DIR")
+        orig_db = os.environ.get("AEONIX_DB_PATH")
+
+        try:
+            # Point to production secrets dir in test mode -> must raise PermissionError
+            os.environ["AEONIX_SECRETS_DIR"] = PROD_SECRETS_DIR
+            with self.assertRaises(PermissionError) as ctx_sec:
+                get_secrets_dir()
+            self.assertIn("PRODUCTION_ACCESS_REFUSED_IN_TEST_MODE", str(ctx_sec.exception))
+
+            # Point to production db in test mode -> must raise PermissionError
+            os.environ["AEONIX_DB_PATH"] = PROD_DB_PATH
+            with self.assertRaises(PermissionError) as ctx_db:
+                get_db_path()
+            self.assertIn("PRODUCTION_ACCESS_REFUSED_IN_TEST_MODE", str(ctx_db.exception))
+        finally:
+            if orig_sec is not None:
+                os.environ["AEONIX_SECRETS_DIR"] = orig_sec
+            if orig_db is not None:
+                os.environ["AEONIX_DB_PATH"] = orig_db
+
 
 if __name__ == "__main__":
     unittest.main()

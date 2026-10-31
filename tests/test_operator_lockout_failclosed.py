@@ -143,14 +143,25 @@ class TestOperatorLockoutFailClosed(unittest.TestCase):
         self.assertTrue(is_locked)
         self.assertEqual(attempts, 15)
 
-    def test_06_verifiable_reset_revocation_details(self):
-        """reset_operator_credentials returns verifiable audit details and revokes active tokens."""
+    def test_06_verifiable_reset_invalidates_credentials_sessions_and_approvals(self):
+        """reset_operator_credentials invalidates credentials, active sessions, and pending/approved approvals."""
         from aeonix.core.auth import get_or_create_device_token
-        # Create and persist an active POCO token in secrets dir
+        from aeonix.core.db import queue_sentinel_request, resolve_sentinel_request, compute_action_digest, get_connection
+
+        # 1. Credentials Setup
+        self.assertTrue(is_operator_setup(self.secrets_dir))
+
+        # 2. Sessions Setup: create active token
         poco_token = get_or_create_device_token("dev_poco_1", ROLE_POCO_CORE, secrets_dir=self.secrets_dir)
         payload = verify_token(poco_token, secrets_dir=self.secrets_dir, db_path=self.db_path)
         self.assertIsNotNone(payload)
         token_nonce = payload["nonce"]
+
+        # 3. Approvals Setup: queue 1 pending request, 1 approved request
+        req_pending = queue_sentinel_request("FORGE", "consequential", "file_remove", "rm /tmp/a", {"cwd": "/tmp"}, "R2", db_path=self.db_path)
+        req_approved = queue_sentinel_request("FORGE", "consequential", "file_remove", "rm /tmp/b", {"cwd": "/tmp"}, "R2", db_path=self.db_path)
+        digest = compute_action_digest(req_approved, "FORGE", "file_remove", "rm /tmp/b", {"cwd": "/tmp"})
+        resolve_sentinel_request(req_approved, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, expected_action_digest=digest, db_path=self.db_path)
 
         # Trigger a failed attempt to create lockout file
         record_failed_attempt(self.secrets_dir)
@@ -158,16 +169,33 @@ class TestOperatorLockoutFailClosed(unittest.TestCase):
         # Perform confirmed reset
         res = reset_operator_credentials(secrets_dir=self.secrets_dir, confirm=True, db_path=self.db_path)
         self.assertTrue(res["success"])
-        self.assertEqual(res["revoked_tokens_count"], 1)
-        self.assertIn(token_nonce, res["revoked_nonces"])
+        
+        # Verify 1: Credentials Invalidated
         self.assertTrue(res["pin_removed"])
         self.assertTrue(res["lockout_cleared"])
-        self.assertIsNotNone(res["audit_hash"])
         self.assertFalse(is_operator_setup(self.secrets_dir))
 
-        # Token is now revoked! verify_token must return None
+        # Verify 2: Sessions Invalidated
+        self.assertEqual(res["revoked_tokens_count"], 1)
+        self.assertIn(token_nonce, res["revoked_nonces"])
         verified = verify_token(poco_token, secrets_dir=self.secrets_dir, db_path=self.db_path)
         self.assertIsNone(verified)
+
+        # Verify 3: Approvals Invalidated
+        self.assertEqual(res["revoked_approvals_count"], 2)
+        self.assertIn(req_pending, res["revoked_approval_ids"])
+        self.assertIn(req_approved, res["revoked_approval_ids"])
+
+        conn = get_connection(self.db_path, allow_maintenance=True)
+        cur = conn.cursor()
+        cur.execute("SELECT id, status, error_msg FROM sentinel_requests WHERE id IN (?, ?);", (req_pending, req_approved))
+        rows = {r["id"]: (r["status"], r["error_msg"]) for r in cur.fetchall()}
+        conn.close()
+
+        self.assertEqual(rows[req_pending][0], "revoked")
+        self.assertEqual(rows[req_pending][1], "REVOKED_DUE_TO_OPERATOR_RESET")
+        self.assertEqual(rows[req_approved][0], "revoked")
+        self.assertEqual(rows[req_approved][1], "REVOKED_DUE_TO_OPERATOR_RESET")
 
 
 if __name__ == "__main__":

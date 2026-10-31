@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-31T14:29:49Z",
+  "generated_at": "2026-10-31T15:24:02Z",
   "total_test_suites": 18,
-  "total_test_cases": 150,
+  "total_test_cases": 151,
   "suites": [
     {
       "module": "test_agents",
@@ -135,9 +135,15 @@
           "docstring": "Operator console requires PBKDF2 setup, enforces persistent lockout, and generates Action Digest.",
           "full_docstring": "Operator console requires PBKDF2 setup, enforces persistent lockout, and generates Action Digest.",
           "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_10_production_paths_strictly_refused_in_test_mode",
+          "docstring": "In test mode (AEONIX_TEST_MODE=1), attempting to resolve production paths raises PermissionError.",
+          "full_docstring": "In test mode (AEONIX_TEST_MODE=1), attempting to resolve production paths raises PermissionError.",
+          "is_negative_security_test": false
         }
       ],
-      "test_count": 9
+      "test_count": 10
     },
     {
       "module": "test_hybrid_router_and_ai",
@@ -453,9 +459,9 @@
           "is_negative_security_test": true
         },
         {
-          "test_name": "test_06_verifiable_reset_revocation_details",
-          "docstring": "reset_operator_credentials returns verifiable audit details and revokes active tokens.",
-          "full_docstring": "reset_operator_credentials returns verifiable audit details and revokes active tokens.",
+          "test_name": "test_06_verifiable_reset_invalidates_credentials_sessions_and_approvals",
+          "docstring": "reset_operator_credentials invalidates credentials, active sessions, and pending/approved approvals.",
+          "full_docstring": "reset_operator_credentials invalidates credentials, active sessions, and pending/approved approvals.",
           "is_negative_security_test": false
         }
       ],

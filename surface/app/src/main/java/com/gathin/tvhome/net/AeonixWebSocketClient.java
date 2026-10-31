@@ -82,47 +82,48 @@ public class AeonixWebSocketClient {
         return "";
     }
 
-    private SSLSocketFactory getPinnedSSLSocketFactory(String expectedFingerprint) throws Exception {
+    public static X509TrustManager createPinnedTrustManager(String expectedFingerprint) {
         if (expectedFingerprint == null || expectedFingerprint.trim().isEmpty()) {
             throw new IllegalArgumentException("MISSING_PIN: Certificate pin cannot be null or empty. Plaintext fallback prohibited.");
         }
         final String cleanExpected = expectedFingerprint.replaceAll("[:\\s]", "").toUpperCase();
-        TrustManager[] trustManagers = new TrustManager[]{
-            new X509TrustManager() {
-                @Override
-                public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+        return new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) {}
 
-                @Override
-                public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                    if (chain == null || chain.length == 0) {
-                        throw new CertificateException("Empty certificate chain");
-                    }
-                    X509Certificate cert = chain[0];
-                    try {
-                        MessageDigest md = MessageDigest.getInstance("SHA-256");
-                        byte[] der = cert.getEncoded();
-                        byte[] digest = md.digest(der);
-                        StringBuilder sb = new StringBuilder();
-                        for (byte b : digest) {
-                            sb.append(String.format("%02X", b));
-                        }
-                        String actualFingerprint = sb.toString();
-                        if (!actualFingerprint.equalsIgnoreCase(cleanExpected)) {
-                            throw new CertificateException("Certificate pin mismatch! Expected " + cleanExpected + " but got " + actualFingerprint);
-                        }
-                    } catch (Exception e) {
-                        if (e instanceof CertificateException) throw (CertificateException) e;
-                        throw new CertificateException("Error verifying certificate fingerprint", e);
-                    }
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                if (chain == null || chain.length == 0) {
+                    throw new CertificateException("Empty certificate chain");
                 }
-
-                @Override
-                public X509Certificate[] getAcceptedIssuers() {
-                    return new X509Certificate[0];
+                X509Certificate cert = chain[0];
+                try {
+                    MessageDigest md = MessageDigest.getInstance("SHA-256");
+                    byte[] der = cert.getEncoded();
+                    byte[] digest = md.digest(der);
+                    StringBuilder sb = new StringBuilder();
+                    for (byte b : digest) {
+                        sb.append(String.format("%02X", b));
+                    }
+                    String actualFingerprint = sb.toString();
+                    if (!actualFingerprint.equalsIgnoreCase(cleanExpected)) {
+                        throw new CertificateException("Certificate pin mismatch! Expected " + cleanExpected + " but got " + actualFingerprint);
+                    }
+                } catch (Exception e) {
+                    if (e instanceof CertificateException) throw (CertificateException) e;
+                    throw new CertificateException("Error verifying certificate fingerprint", e);
                 }
             }
-        };
 
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
+    }
+
+    public static SSLSocketFactory getPinnedSSLSocketFactory(String expectedFingerprint) throws Exception {
+        TrustManager[] trustManagers = new TrustManager[]{ createPinnedTrustManager(expectedFingerprint) };
         SSLContext sslContext = SSLContext.getInstance("TLS");
         sslContext.init(null, trustManagers, new SecureRandom());
         return sslContext.getSocketFactory();

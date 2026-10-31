@@ -13,8 +13,8 @@
 
 | Repository | Branch | Full 40-Character Git Commit SHA | Scope of Changes |
 |---|---|---|---|
-| [`aditya0kmr/aeonix-prism`](https://github.com/aditya0kmr/aeonix-prism) | `main` | `4ffdeb0315b25cb6530d6f2e2bf9024bf92a4a0f` | Action digest enforcement, writer quiescence & draining, narrow allowlist root & agent-state protection, test environment isolation, concurrency-safe lockout mutex, verifiable operator reset, test inventory & run artifacts. |
-| [`aditya0kmr/cleanyourtv`](https://github.com/aditya0kmr/cleanyourtv) | `feature/cleanyourtv-hybrid-base` | `f3635090bd1e4604b5409e1756bfba7e6845fd68` | Pinned `SSLSocketFactory` with mandatory certificate fingerprint validation; plaintext socket fallback eliminated; empty-pin fallback prohibited. |
+| [`aditya0kmr/aeonix-prism`](https://github.com/aditya0kmr/aeonix-prism) | `main` | `[WILL_BE_UPDATED_ON_COMMIT]` | Continuous SQLite restore quiescence, pre-import test environment isolation refusing production paths, test outcome reconciliation & nonzero exit, machine-generated test inventory, dirty diff digest recording, 3-tier verifiable reset invalidation. |
+| [`aditya0kmr/cleanyourtv`](https://github.com/aditya0kmr/cleanyourtv) | `feature/cleanyourtv-hybrid-base` | `6567d261f2826eebd042193a558c143892cc97fb` | Pinned `SSLSocketFactory` with mandatory certificate fingerprint validation; plaintext socket fallback eliminated; empty-pin fallback prohibited; native Android JUnit tests for TLS pin verification. |
 
 ---
 
@@ -23,167 +23,160 @@
 > [!IMPORTANT]
 > In accordance with governing engineering directives:
 > * **Gate G0 (Audit & Recovery Baseline):** **PARTIAL** (Disaster recovery quiescence verified, active baseline cataloged, multi-device release validation in progress).
-> * **Gate G1 (Authority Foundation):** **OPEN** (Authority foundation hardened, 150/150 negative and security test suites passing, active vault encryption migration deferred until formal G1 acceptance).
+> * **Gate G1 (Authority Foundation):** **OPEN** (Authority foundation hardened, 151/151 negative and security test suites passing, active vault encryption migration deferred until formal G1 acceptance).
 > * **Whole-Project Completion:** **NOT CLAIMED**. Work proceeds systematically gate-by-gate.
 
 ---
 
-## 3. Systematic Closure of Findings 1 through 7
+## 3. Systematic Verification of the Seven Pre-G1 Acceptance Requirements
 
-### Finding 1: Client TLS & Certificate Pinning (Plaintext & Empty-Pin Fallback Prohibited)
-* **Vulnerability:** Early client implementation permitted falling back to unencrypted plaintext `new Socket()` if port was 8080 or if certificate pin string was empty.
+### Requirement 1: Continuous Database Quiescence Through Restore
+* **Defect Addressed:** Previous disaster recovery implementation performed a brief preflight `BEGIN EXCLUSIVE; COMMIT;` check and released the lock prior to restoring, leaving a race window where background writers could resume and corrupt an active restore.
 * **Resolution:**
-  1. Updated [`aether-launcher/app/src/main/java/com/gathin/tvhome/net/AeonixWebSocketClient.java`](file:///data/data/com.termux/files/home/aether-launcher/app/src/main/java/com/gathin/tvhome/net/AeonixWebSocketClient.java) (and mirrored in `surface/`):
-     - Completely removed plaintext socket fallback (`new Socket()` eliminated).
-     - Added strict check: `if (pinnedFp == null || pinnedFp.trim().isEmpty()) throw new IllegalStateException("NO_PIN_PROVISIONED...");`.
-     - In `getPinnedSSLSocketFactory`: throws `IllegalArgumentException` on null/empty pin.
-     - Handshake computes X.509 SHA-256 fingerprint and validates against pinned fingerprint.
-  2. Live APK compiled (`assembleDebug` in 51s) and installed on Fire TV (`10.116.23.179:5555`).
-  3. Live TLS handshake established over WSS (`INFO: 10.116.23.179 - "WebSocket /ws" [accepted]`).
-* **Verification Suite:** [`tests/test_poco_bearer_bypass_and_digest.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_poco_bearer_bypass_and_digest.py) (`test_10_tls_and_pinned_handshake_negative_validation`).
-* **Negative Test Run Output:**
+  1. Updated [`aeonix/core/backup.py`](file:///data/data/com.termux/files/home/aeonix/core/backup.py):
+     - `_quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[Optional[sqlite3.Connection], Optional[str]]`:
+       - Acquires `PRAGMA locking_mode = EXCLUSIVE;` and executes `PRAGMA wal_checkpoint(TRUNCATE);`.
+       - Returns the active `held_conn` without committing or closing it, ensuring the database remains continuously exclusive.
+     - `restore_vault_backup`:
+       - Restores directly into `held_conn` via SQLite's native Online Backup API (`src_conn.backup(held_conn)`).
+       - Executes `PRAGMA wal_checkpoint(TRUNCATE);`, commits, and closes `held_conn` only after the entire restore completes.
+       - If concurrent writers are active or quiescence fails, aborts immediately with `RESTORE_ABORTED_QUIESCENCE_FAILED` and preserves target database integrity without writing partial files.
+* **Verification Suite:** [`tests/test_restore_coordination_and_writer_lock.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_restore_coordination_and_writer_lock.py) (4 tests passed).
+* **Test Output:**
   ```text
-  validate_pin_handshake("", ...) -> ValueError: NO_PIN_PROVISIONED: Sovereign glass terminal strictly mandates a valid provisioned certificate pin.
-  validate_pin_handshake("AA:BB:CC:DD", "EE:FF:00:11") -> ConnectionError: Certificate pin mismatch! Expected AABBCCDD but got EEFF0011
-  validate_pin_handshake("AA:BB:CC:DD", "aa:bb:cc:dd") -> True [PASSED]
+  test_01_active_writer_causes_quiescence_failure_and_aborts_restore ... ok
+  test_02_quiescence_held_continuously_through_restore ... ok
+  test_03_clean_restore_succeeds_under_exclusive_quiescence ... ok
+  test_04_overlapping_restore_prevented_by_lock ... ok
   ```
 
 ---
 
-### Finding 2: Require Exact Reviewed Digest for Protected Approval
-* **Vulnerability:** Sentinel request approval previously allowed omitting `expected_action_digest`, meaning an operator could approve without cryptographically validating the displayed card digest against the database record.
+### Requirement 2: Bootstrap Isolated Test Environment & Refuse Production Paths
+* **Defect Addressed:** Test suites previously could accidentally resolve default production paths (`~/.aeonix/secrets` or `~/aeonix/data/aeonix_vault.db`) if environment variables were omitted.
 * **Resolution:**
-  1. Updated [`core/db.py`](file:///data/data/com.termux/files/home/aeonix/core/db.py) in `resolve_sentinel_request`:
-     - If `approved is True` and `not expected_action_digest or not str(expected_action_digest).strip()`, logs an audit event and immediately rejects with `ACTION_DIGEST_REQUIRED: Approval of consequential actions strictly requires non-empty displayed action_digest`.
-     - Validates `expected_action_digest` against computed canonical SHA-256 digest; rejects tampered digests with `DIGEST_MISMATCH`.
-  2. Updated [`core/server.py`](file:///data/data/com.termux/files/home/aeonix/core/server.py) in `resolve_sentinel`:
-     - Extract `action_digest` from request JSON body. If missing or whitespace, returns `400 Bad Request` with `ACTION_DIGEST_REQUIRED`.
-* **Verification Suite:** [`tests/test_poco_bearer_bypass_and_digest.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_poco_bearer_bypass_and_digest.py) (`test_03`, `test_04`, `test_07`, `test_08`).
-* **Negative Test Run Output:**
-  ```text
-  test_04_db_level_missing_or_empty_digest_rejected ... ok (returned ACTION_DIGEST_REQUIRED)
-  test_03_db_level_digest_tampering_rejected ... ok (returned DIGEST_MISMATCH)
-  test_07_api_level_missing_action_digest_rejected ... ok (status 400 ACTION_DIGEST_REQUIRED)
-  test_08_api_level_valid_passphrase_and_matching_digest_succeeds ... ok (status 200 approved)
+  1. Updated [`aeonix/core/auth.py`](file:///data/data/com.termux/files/home/aeonix/core/auth.py):
+     - In `get_secrets_dir()`: Checks if `os.getenv("AEONIX_TEST_MODE") == "1"` and resolved directory matches `PROD_SECRETS_DIR`. Raises fail-closed `PermissionError("PRODUCTION_ACCESS_REFUSED_IN_TEST_MODE: Secret path resolves to production secrets directory during test execution.")`.
+  2. Updated [`aeonix/core/db.py`](file:///data/data/com.termux/files/home/aeonix/core/db.py):
+     - In `get_db_path()`: Checks if `os.getenv("AEONIX_TEST_MODE") == "1"` and resolved path matches `PROD_DB_PATH`. Raises fail-closed `PermissionError("PRODUCTION_ACCESS_REFUSED_IN_TEST_MODE: Database path resolves to production vault database during test execution.")`.
+  3. Created isolated test bootstrapping in [`tests/__init__.py`](file:///data/data/com.termux/files/home/aeonix/tests/__init__.py) and [`scripts/run_portable_test_suite.py`](file:///data/data/com.termux/files/home/aeonix/scripts/run_portable_test_suite.py):
+     - Automatically creates a temporary sandbox directory before project imports.
+     - Sets `AEONIX_TEST_MODE = "1"`, `AEONIX_SECRETS_DIR`, `AEONIX_DB_PATH`.
+  4. Cryptographic Proof of Production Invariance:
+     - The portable test runner computes SHA-256 hashes of all production secrets and the live vault database before test discovery.
+     - After running all 151 tests, it re-computes SHA-256 hashes of every production file.
+     - Bit-for-bit comparison proves: `verified_unchanged: True`, `mutations: []`.
+* **Verification Suite:** [`tests/test_boundary_auth_inventory.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_boundary_auth_inventory.py) (`test_10_production_paths_strictly_refused_in_test_mode`).
+
+---
+
+### Requirement 3: Real Java/Android TLS Client Testing
+* **Defect Addressed:** Previous TLS pinning validations in the backend were tested via Python client mocks rather than executing the real Java/Android client codebase.
+* **Resolution:**
+  1. Updated [`aether-launcher/app/src/main/java/com/gathin/tvhome/net/AeonixWebSocketClient.java`](file:///data/data/com.termux/files/home/aether-launcher/app/src/main/java/com/gathin/tvhome/net/AeonixWebSocketClient.java):
+     - Refactored `createPinnedTrustManager` and `getPinnedSSLSocketFactory` into public static methods for direct cryptographic unit testability.
+  2. Created real Android JUnit test suite in [`aether-launcher/app/src/test/java/com/gathin/tvhome/net/AeonixWebSocketClientTest.java`](file:///data/data/com.termux/files/home/aether-launcher/app/src/test/java/com/gathin/tvhome/net/AeonixWebSocketClientTest.java) (and mirrored in `surface/`):
+     - `testNullPinThrowsIllegalArgumentException`: Asserts `IllegalArgumentException` with `MISSING_PIN...`.
+     - `testEmptyPinThrowsIllegalArgumentException`: Asserts `IllegalArgumentException` on empty string.
+     - `testWhitespacePinThrowsIllegalArgumentException`: Asserts `IllegalArgumentException` on whitespace.
+     - `testEmptyCertChainThrowsCertificateException`: Asserts `CertificateException` on 0-length cert chain.
+     - `testValidPinCreatesTrustManagerAndSocketFactory`: Asserts `SSLSocketFactory` creation.
+     - `testMismatchedPinThrowsCertificateException`: Asserts `CertificateException` when presented certificate SHA-256 fingerprint does not match pin.
+     - `testMatchingPinSucceeds`: Asserts clean validation without exception when fingerprint matches.
+  3. Executed directly via Gradle test runner on POCO host:
+     `./gradlew testDebugUnitTest --tests com.gathin.tvhome.net.AeonixWebSocketClientTest`.
+* **JUnit Test Run Output:**
+  ```xml
+  <testsuite name="com.gathin.tvhome.net.AeonixWebSocketClientTest" tests="7" skipped="0" failures="0" errors="0" time="0.395">
+    <testcase name="testValidPinCreatesTrustManagerAndSocketFactory" classname="com.gathin.tvhome.net.AeonixWebSocketClientTest" time="0.333"/>
+    <testcase name="testNullPinThrowsIllegalArgumentException" classname="com.gathin.tvhome.net.AeonixWebSocketClientTest" time="0.001"/>
+    <testcase name="testWhitespacePinThrowsIllegalArgumentException" classname="com.gathin.tvhome.net.AeonixWebSocketClientTest" time="0.0"/>
+    <testcase name="testEmptyPinThrowsIllegalArgumentException" classname="com.gathin.tvhome.net.AeonixWebSocketClientTest" time="0.0"/>
+    <testcase name="testMatchingPinSucceeds" classname="com.gathin.tvhome.net.AeonixWebSocketClientTest" time="0.053"/>
+    <testcase name="testMismatchedPinThrowsCertificateException" classname="com.gathin.tvhome.net.AeonixWebSocketClientTest" time="0.004"/>
+    <testcase name="testEmptyCertChainThrowsCertificateException" classname="com.gathin.tvhome.net.AeonixWebSocketClientTest" time="0.0"/>
+  </testsuite>
   ```
+  **Result:** 7/7 tests PASSED in 0.395s.
 
 ---
 
-### Finding 3: Stop/Drain Existing Writers & Abort Restore on Failed Quiescence
-* **Vulnerability:** Database restoration during disaster recovery could overwrite active SQLite WAL files while writers held background checkpoint locks, risking table corruption.
+### Requirement 4 & 5: Record All Outcomes, Reconcile Cases & Generate Counts from Inventory
+* **Deliverable:** Automated runner recording all outcomes, full reconciliation between discovered, executed, and inventory counts, and nonzero exit on any discrepancy.
 * **Resolution:**
-  1. Updated [`core/backup.py`](file:///data/data/com.termux/files/home/aeonix/core/backup.py):
-     - Added `_quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[bool, Optional[str]]`.
-     - Verifies WAL checkpoint busy code (`PRAGMA wal_checkpoint(TRUNCATE)`).
-     - Obtains exclusive lock via `BEGIN EXCLUSIVE; COMMIT;`.
-     - If writers hold locks or cannot be drained within timeout, fails quiescence.
-  2. In `restore_vault_backup`:
-     - Calls `_quiesce_database()`. If quiescence fails, immediately aborts before file extraction:
-       `{"success": False, "status": "RESTORE_ABORTED_QUIESCENCE_FAILED", "error": "RESTORE_ABORTED: Active database writers could not be drained..."}`.
-     - Preserves target database completely intact.
-* **Verification Suite:** [`tests/test_restore_coordination_and_writer_lock.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_restore_coordination_and_writer_lock.py) (`test_04_active_writer_causes_quiescence_failure_and_aborts_restore`).
-* **Negative Test Run Output:**
-  ```text
-  test_04_active_writer_causes_quiescence_failure_and_aborts_restore:
-  Active writer holds BEGIN EXCLUSIVE lock -> restore_vault_backup aborted.
-  Status: RESTORE_ABORTED_QUIESCENCE_FAILED
-  Target DB integrity preserved and functional. [PASSED]
-  ```
+  1. Updated [`scripts/generate_test_inventory.py`](file:///data/data/com.termux/files/home/aeonix/scripts/generate_test_inventory.py):
+     - Discovers all tests, extracts docstrings, tags negative security tests, and outputs [`docs/test_inventory.json`](file:///data/data/com.termux/files/home/aeonix/docs/test_inventory.json).
+     - Inventory Total: **151 test cases** across **18 suites**.
+  2. Updated [`scripts/run_portable_test_suite.py`](file:///data/data/com.termux/files/home/aeonix/scripts/run_portable_test_suite.py):
+     - Tracks discovered vs executed test IDs.
+     - Verifies: `missing_from_execution == []`, `unexpected_executed == []`.
+     - Reconciles against `docs/test_inventory.json`: `inventory_total == executed_tests == 151`.
+     - Records full outcome in [`docs/test_run_artifact.json`](file:///data/data/com.termux/files/home/aeonix/docs/test_run_artifact.json).
+     - Returns `exit 0` only if all tests pass, reconciliation succeeds, and production isolation holds. Returns `exit 1` on any failure.
 
 ---
 
-### Finding 4: Remove Agent-State Directories from Scope & Protect Allowlist Roots
-* **Vulnerability:** `NARROW_FS_ALLOWLIST` previously permitted subpaths within `~/.gemini/antigravity-cli`, and `is_within_narrow_fs_allowlist` permitted operations where target path matched the allowlist root itself, risking root directory deletion.
+### Requirement 6: Record Source Commit, Dirty Digest, Runtime and Exact Command
+* **Deliverable:** Unambiguous provenance metadata recorded directly in machine-readable artifact and summary.
+* **Recorded Metadata in `docs/test_run_artifact.json`:**
+  - `source_commit`: Full 40-character commit SHA.
+  - `dirty_digest`: Cryptographic SHA-256 of unstaged + staged diff (`git diff HEAD`).
+  - `git_status`: Short porcelain status of repository tree.
+  - `runtime`:
+    - Python version: `3.14.8 [Clang 21.0.0]`
+    - Platform: `Android-13-aarch64-64bit` (Termux Linux)
+    - Architecture: `aarch64`
+    - PID: `16309`
+  - `exact_command`: `/data/data/com.termux/files/usr/bin/python3 /data/data/com.termux/files/home/aeonix/scripts/run_portable_test_suite.py`
+
+---
+
+### Requirement 7: Verifiable Reset Invalidation Across Credentials, Sessions, and Approvals
+* **Defect Addressed:** Resetting credentials previously removed local token files but did not explicitly revoke pending/approved sentinel actions or log audit nonces in the database.
 * **Resolution:**
-  1. Updated [`core/forge.py`](file:///data/data/com.termux/files/home/aeonix/core/forge.py):
-     - Removed `~/.gemini/antigravity-cli` from `NARROW_FS_ALLOWLIST`.
-     - Added `ALLOWLIST_ROOTS = {os.path.realpath(r) for r in NARROW_FS_ALLOWLIST}`.
-     - `is_within_narrow_fs_allowlist(target_path)` checks `if resolved in ALLOWLIST_ROOTS: return False, "ROOT_DELETION_PROHIBITED"`.
-     - Requires strictly `resolved.startswith(real_root + os.sep) and resolved != real_root`.
-     - Added explicit protection check: paths containing `{".gemini", "antigravity-cli", "brain", ".system_generated"}` are strictly prohibited with `PROTECTED_RESOURCE`.
-* **Verification Suite:** [`tests/test_narrow_fs_allowlist.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_narrow_fs_allowlist.py) (`test_02`, `test_03`).
-* **Negative Test Run Output:**
-  ```text
-  test_02_allowlist_root_deletion_prohibited:
-  file_remove target='/tmp' -> status='denied', error='ROOT_DELETION_PROHIBITED' [PASSED]
-  test_03_agent_state_directories_protected:
-  file_remove target='~/.gemini/antigravity-cli' -> status='denied', error='PROTECTED_RESOURCE' [PASSED]
-  ```
+  1. Updated [`aeonix/core/operator_console.py`](file:///data/data/com.termux/files/home/aeonix/core/operator_console.py) in `reset_operator_credentials`:
+     - **Credentials:** Unlinks `operator_pin.json`, clears failed-attempt state in `operator_lockout.json`.
+     - **Sessions:** Identifies active `token_*.json`, extracts token nonces, records nonces in SQLite `revoked_tokens` table via `revoke_token()`, and unlinks token files.
+     - **Approvals:** Queries `sentinel_requests` where status is in `('pending', 'approved')`, transitions status to `'revoked'` with `error_msg = 'REVOKED_DUE_TO_OPERATOR_RESET'`.
+     - Returns structured `ResetResult`:
+       ```json
+       {
+         "success": true,
+         "revoked_tokens_count": 1,
+         "revoked_nonces": ["8c72..."],
+         "revoked_approvals_count": 2,
+         "revoked_approval_ids": ["req_001", "req_002"],
+         "audit_hash": "a1b2...",
+         "pin_removed": true,
+         "lockout_cleared": true
+       }
+       ```
+* **Verification Suite:** [`tests/test_operator_lockout_failclosed.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_operator_lockout_failclosed.py) (`test_06_verifiable_reset_invalidates_credentials_sessions_and_approvals`).
 
 ---
 
-### Finding 5: Isolate All Tests from Default Secrets, Lockout & Live Databases
-* **Vulnerability:** Tests previously defaulted to `~/.aeonix/secrets` and `~/aeonix/data/aeonix_vault.db` if environment variables were not explicitly propagated at import time, risking operator lockout and database contamination.
-* **Resolution:**
-  1. Updated [`core/auth.py`](file:///data/data/com.termux/files/home/aeonix/core/auth.py):
-     - Added dynamic directory resolution: `get_secrets_dir() -> str` returns `os.getenv("AEONIX_SECRETS_DIR", SECRETS_DIR)`.
-     - `get_master_key()` dynamically retrieves/creates master secret inside `get_secrets_dir()`.
-     - `issue_device_token()` and `verify_token()` dynamically load master secret via `get_master_key()`.
-  2. Updated [`core/db.py`](file:///data/data/com.termux/files/home/aeonix/core/db.py):
-     - Added dynamic database path resolution: `get_db_path() -> str` returns `os.getenv("AEONIX_DB_PATH", DB_PATH)`.
-     - Replaced hardcoded default arguments `db_path: str = DB_PATH` across 16 functions with `db_path: Optional[str] = None`, dynamically defaulting to `get_db_path()`.
-  3. Updated [`core/operator_console.py`](file:///data/data/com.termux/files/home/aeonix/core/operator_console.py):
-     - Dynamically resolves `_s_dir(secrets_dir)` and `_d_path(db_path)` from environment.
-  4. Created [`tests/__init__.py`](file:///data/data/com.termux/files/home/aeonix/tests/__init__.py):
-     - Automatically provisions an isolated sandbox tempdir for `AEONIX_SECRETS_DIR` and `AEONIX_DB_PATH`.
-     - Cleans up via `atexit.register()`.
-  5. Isolated network unit tests in [`tests/test_phase4_panoptes_guardian.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_phase4_panoptes_guardian.py) using `@patch("httpx.Client")`.
-* **Verification Suite:** [`tests/__init__.py`](file:///data/data/com.termux/files/home/aeonix/tests/__init__.py) and full test discovery runner.
-
----
-
-### Finding 6: Concurrency-Safe Lockout Updates & Verifiable Reset Revocation
-* **Vulnerability:** Concurrent failed attempt updates on `operator_lockout.json` lacked file-level mutex synchronization, risking race conditions. The credential reset function returned a generic string without verifiable revocation details.
-* **Resolution:**
-  1. Updated [`core/operator_console.py`](file:///data/data/com.termux/files/home/aeonix/core/operator_console.py):
-     - Added file-level mutex locking: `record_failed_attempt` and `reset_lockout_state` acquire `fcntl.flock(m_fd.fileno(), fcntl.LOCK_EX)` on `os.path.join(s_dir, ".lockout.lock")`.
-     - Implemented `ResetResult(dict)` supporting dictionary keys and tuple unpacking `(success, message)`.
-     - `reset_operator_credentials` scans `s_dir` for `token_*.json`, decodes token nonces, revokes them in SQLite `revoked_tokens` table via `revoke_token()`, securely removes token files, and clears lockout.
-     - Returns verifiable `revoked_tokens_count`, `revoked_nonces`, `audit_hash`, `pin_removed`, `lockout_cleared`.
-* **Verification Suite:** [`tests/test_operator_lockout_failclosed.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_operator_lockout_failclosed.py) (`test_05`, `test_06`).
-* **Negative Test Run Output:**
-  ```text
-  test_05_concurrent_lockout_updates_thread_safe:
-  5 threads x 3 attempts = 15 attempts recorded under flock without corruption. [PASSED]
-  test_06_verifiable_reset_revocation_details:
-  ResetResult: revoked_tokens_count=1, revoked_nonces=['...'], audit_hash='...', pin_removed=True, lockout_cleared=True.
-  verify_token(poco_token) after reset -> None (revoked) [PASSED]
-  ```
-
----
-
-### Finding 7: Machine-Generated Test Inventory & Portable Run Artifacts
-* **Deliverable:** Full machine-generated inventory cataloging every test suite and portable execution run artifact.
-* **Resolution:**
-  1. Created [`scripts/generate_test_inventory.py`](file:///data/data/com.termux/files/home/aeonix/scripts/generate_test_inventory.py): Discovers all test files, extracts module, class, test name, docstring, and security tags.
-     - Generated [`docs/test_inventory.json`](file:///data/data/com.termux/files/home/aeonix/docs/test_inventory.json): **150 test cases** across **18 suites**.
-  2. Created [`scripts/run_portable_test_suite.py`](file:///data/data/com.termux/files/home/aeonix/scripts/run_portable_test_suite.py): Executes test discovery under custom `PortableTestResult`, tracking duration, status, and error traces.
-     - Generated [`docs/test_run_artifact.json`](file:///data/data/com.termux/files/home/aeonix/docs/test_run_artifact.json): **150/150 PASSED** (**100.0% pass rate** in **64.26s**).
-  3. Both artifacts mirrored to the brain artifact directory:
-     - `test_inventory.json` (51,531 bytes)
-     - `test_run_artifact.json` (30,626 bytes)
-
----
-
-## 4. Test Execution Summary
+## 4. Test Execution Summary (151/151 PASSED)
 
 ```text
-============================================================
-ÆONIX PRISM Test Run Completed: 150/150 PASSED
-Pass Rate: 100.0% | Total Time: 64.263s
-Total Test Suites: 18
-Total Test Cases: 150
-Failures: 0
-Errors: 0
-============================================================
+======================================================================
+ÆONIX PRISM Portable Test Execution Summary
+Source Commit: 66b2de9ec98eabe08094b9aa3b9a695954bbc8d5
+Dirty Digest:  7bbfaa9a7c1fa6906abbf1fed2c921a76279e5d4f624c796a8655c85c36b0d6f
+Discovered:    151 | Executed: 151 | Reconciled: True
+Inventory:     151 (Reconciled: True)
+Results:       151 PASS | 0 FAIL | 0 ERROR | 0 SKIP
+Pass Rate:     100.0% in 65.183s
+Prod Isolation Verified: True
+Artifact:      /data/data/com.termux/files/home/aeonix/docs/test_run_artifact.json
+======================================================================
 ```
 
-### Breakdown of Test Suites
-1. `tests.test_boundary_auth_inventory`: 9 tests (Passphrase boundaries, lifecycle states, format cards)
+### Breakdown of Test Suites (18 Suites, 151 Tests)
+1. `tests.test_boundary_auth_inventory`: 10 tests (Passphrase boundaries, lifecycle states, format cards, production path refusal)
 2. `tests.test_poco_bearer_bypass_and_digest`: 10 tests (POCO bearer bypass elimination, digest binding, TLS pin negative validation)
-3. `tests.test_restore_coordination_and_writer_lock`: 4 tests (Active writer locks, overlapping restore blocking, writer quiescence abort)
+3. `tests.test_restore_coordination_and_writer_lock`: 4 tests (Continuous quiescence through restore, active writer lock, overlapping restore blocking)
 4. `tests.test_narrow_fs_allowlist`: 6 tests (Path allowlist containment, root deletion prohibition, agent-state protection, claim finalization)
-5. `tests.test_operator_lockout_failclosed`: 6 tests (Fail-closed lockout, persistent restarts, concurrency flock safety, verifiable reset)
+5. `tests.test_operator_lockout_failclosed`: 6 tests (Fail-closed lockout, persistent restarts, concurrency flock safety, 3-tier verifiable reset)
 6. `tests.test_negative_security_and_auth`: 13 tests (Negative security, replay rejection, scope mismatch, target tampering, audit integrity)
 7. `tests.test_stage1_security`: 17 tests (Stage 1 security controls, role enforcement, order signing)
 8. `tests.test_stage2_correctness`: 18 tests (Core loop correctness, typed dispatch, state consistency)

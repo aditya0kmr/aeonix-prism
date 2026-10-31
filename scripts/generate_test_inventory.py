@@ -9,11 +9,29 @@ import os
 import sys
 import json
 import inspect
+import tempfile
+import shutil
 import unittest
-import importlib
+
+# Bootstrap isolated environment before imports
+_SANDBOX = tempfile.mkdtemp(prefix="aeonix_inv_sb_")
+_SEC = os.path.join(_SANDBOX, "secrets")
+_DB = os.path.join(_SANDBOX, "vault.db")
+os.makedirs(_SEC, mode=0o700, exist_ok=True)
+os.environ["AEONIX_TEST_MODE"] = "1"
+os.environ["AEONIX_SECRETS_DIR"] = _SEC
+os.environ["AEONIX_DB_PATH"] = _DB
 
 sys.path.insert(0, "/data/data/com.termux/files/home")
 sys.path.insert(0, "/data/data/com.termux/files/home/aeonix")
+
+from aeonix.core.db import init_database
+from aeonix.core.operator_console import setup_operator_secret
+init_database(_DB)
+try:
+    setup_operator_secret("TestPassphrase12345678!", secrets_dir=_SEC)
+except Exception:
+    pass
 
 TESTS_DIR = "/data/data/com.termux/files/home/aeonix/tests"
 OUTPUT_PATH = "/data/data/com.termux/files/home/aeonix/docs/test_inventory.json"
@@ -80,6 +98,8 @@ def generate_inventory():
 
     print(f"Generated test inventory with {total_tests} test cases across {len(inventory['suites'])} suites.")
     print(f"Output saved to {OUTPUT_PATH}")
+
+    shutil.rmtree(_SANDBOX, ignore_errors=True)
     return inventory
 
 

@@ -10,6 +10,8 @@ _TEST_DB_PATH = os.path.join(_TEST_SANDBOX_DIR, "test_vault.db")
 
 os.makedirs(_TEST_SECRETS_DIR, mode=0o700, exist_ok=True)
 
+# Bootstrap test mode and isolated paths BEFORE project imports (Requirement 2)
+os.environ["AEONIX_TEST_MODE"] = "1"
 if "AEONIX_SECRETS_DIR" not in os.environ:
     os.environ["AEONIX_SECRETS_DIR"] = _TEST_SECRETS_DIR
 

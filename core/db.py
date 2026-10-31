@@ -6,10 +6,18 @@ import hashlib
 from typing import Optional, Dict, Any, List
 
 DB_PATH = os.getenv("AEONIX_DB_PATH", os.path.expanduser("~/aeonix/data/aeonix_vault.db"))
+PROD_DB_PATH = os.path.realpath(os.path.expanduser("~/aeonix/data/aeonix_vault.db"))
 
 def get_db_path() -> str:
-    """Returns dynamic database path respecting test isolation environment variables."""
-    return os.getenv("AEONIX_DB_PATH", DB_PATH)
+    """Returns dynamic database path respecting test isolation environment variables. Refuses production paths in test mode."""
+    d_path = os.getenv("AEONIX_DB_PATH", DB_PATH)
+    if os.getenv("AEONIX_TEST_MODE") == "1":
+        real = os.path.realpath(os.path.abspath(d_path))
+        if real == PROD_DB_PATH or real.startswith(os.path.dirname(PROD_DB_PATH) + os.sep + "aeonix_vault.db"):
+            raise PermissionError(
+                f"PRODUCTION_ACCESS_REFUSED_IN_TEST_MODE: Database path '{d_path}' resolves to production vault database during test execution."
+            )
+    return d_path
 
 def get_connection(db_path: Optional[str] = None, allow_maintenance: bool = False) -> sqlite3.Connection:
     actual_db = db_path or get_db_path()
