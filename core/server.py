@@ -28,6 +28,8 @@ from aeonix.core.panoptes import run_passive_osint, get_entity_graph, request_ac
 from aeonix.core.veritas import create_case, ingest_evidence, verify_evidence, generate_case_manifest
 from aeonix.core.guardian import get_network_inventory, async_get_network_inventory
 from aeonix.core.atlas_watch import run_supervisor_cycle
+from aeonix.core.spectra import get_channel_catalog, get_current_playback, set_playback_state, find_channel_by_query
+from aeonix.core.sanctuary import engage_sanctuary, release_sanctuary, get_sanctuary_status, is_sanctuary_active
 
 # Connected Fire TV and client WebSockets
 active_connections: Set[WebSocket] = set()
@@ -183,6 +185,25 @@ async def post_intent(request):
             action_name, confidence = fast_match
             intent_result = execute_fast_path(action_name, actor=actor)
             intent_result["confidence"] = confidence
+
+            # Phase 4 Broadcast triggers for Glass Terminal
+            if "media_play" in intent_result:
+                await broadcast_message({
+                    "type": "media_play",
+                    **intent_result["media_play"]
+                })
+            elif "sanctuary" in intent_result:
+                await broadcast_message({
+                    "type": "sanctuary_mode",
+                    "active": intent_result["sanctuary"]["is_active"]
+                })
+            elif intent_result.get("action", "").startswith("media_"):
+                cmd = intent_result["action"].replace("media_", "")
+                await broadcast_message({
+                    "type": "media_control",
+                    "command": cmd
+                })
+
             return JSONResponse(intent_result)
 
         # Tier 1: Local Qwen2.5-0.5B Micro-Prompt (<50 tokens)
@@ -420,6 +441,96 @@ async def get_atlas_health(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# =========================================================================
+# Phase 4: SPECTRA Media, Live IPTV & Sanctuary Mode Endpoints
+# =========================================================================
+
+async def get_media_channels(request):
+    return JSONResponse({"success": True, "channels": get_channel_catalog()})
+
+async def get_media_current(request):
+    return JSONResponse({"success": True, "playback": get_current_playback()})
+
+async def post_media_play(request):
+    try:
+        body = await request.json()
+        channel_id = body.get("channel_id")
+        stream_url = body.get("stream_url")
+        title = body.get("title")
+        category = body.get("category", "Live IPTV")
+
+        if channel_id:
+            ch = find_channel_by_query(channel_id)
+            if ch:
+                stream_url = ch["stream_url"]
+                title = ch["name"]
+                category = ch["category"]
+
+        if not stream_url:
+            return JSONResponse({"error": "Missing stream_url or channel_id"}, status_code=400)
+
+        channel_info = {
+            "id": channel_id or "custom",
+            "name": title or "Live Stream",
+            "stream_url": stream_url,
+            "category": category
+        }
+        set_playback_state(True, channel_info)
+
+        await broadcast_message({
+            "type": "media_play",
+            "stream_url": stream_url,
+            "title": title or "Live Stream",
+            "category": category
+        })
+        return JSONResponse({"success": True, "playing": channel_info})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_media_control(request):
+    try:
+        body = await request.json()
+        command = body.get("command", "pause")
+        if command in ("stop", "halt"):
+            set_playback_state(False)
+        await broadcast_message({
+            "type": "media_control",
+            "command": command
+        })
+        return JSONResponse({"success": True, "command": command})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_sanctuary_status_endpoint(request):
+    return JSONResponse({"success": True, "sanctuary": get_sanctuary_status()})
+
+async def post_sanctuary_activate(request):
+    try:
+        body = await request.json() if request.headers.get("content-length") else {}
+        actor = body.get("actor", "Aadi")
+        reason = body.get("reason", "Operator Command")
+        res = engage_sanctuary(actor=actor, reason=reason)
+        await broadcast_message({
+            "type": "sanctuary_mode",
+            "active": True
+        })
+        return JSONResponse({"success": True, "sanctuary": res})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_sanctuary_deactivate(request):
+    try:
+        body = await request.json() if request.headers.get("content-length") else {}
+        actor = body.get("actor", "Aadi")
+        res = release_sanctuary(actor=actor)
+        await broadcast_message({
+            "type": "sanctuary_mode",
+            "active": False
+        })
+        return JSONResponse({"success": True, "sanctuary": res})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 app = Starlette(
     routes=[
         Route("/api/status", get_status, methods=["GET"]),
@@ -439,6 +550,13 @@ app = Starlette(
         Route("/api/veritas/manifest", get_veritas_manifest, methods=["GET"]),
         Route("/api/guardian/network", get_guardian_network, methods=["GET"]),
         Route("/api/atlas/health", get_atlas_health, methods=["GET"]),
+        Route("/api/media/channels", get_media_channels, methods=["GET"]),
+        Route("/api/media/current", get_media_current, methods=["GET"]),
+        Route("/api/media/play", post_media_play, methods=["POST"]),
+        Route("/api/media/control", post_media_control, methods=["POST"]),
+        Route("/api/sanctuary/status", get_sanctuary_status_endpoint, methods=["GET"]),
+        Route("/api/sanctuary/activate", post_sanctuary_activate, methods=["POST"]),
+        Route("/api/sanctuary/deactivate", post_sanctuary_deactivate, methods=["POST"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     lifespan=lifespan

@@ -36,11 +36,20 @@ COMMAND_TRIGGERS = {
     "mode_sanctuary": [
         "sanctuary mode", "lockdown", "emergency mode", "go dark"
     ],
+    "mode_sanctuary_release": [
+        "exit sanctuary", "disable lockdown", "safe mode off", "sanctuary off", "release lockdown"
+    ],
     "mode_surface": [
         "living surface", "home screen", "main screen", "ambient mode"
     ],
     "mode_iptv": [
-        "live tv", "iptv", "open tv", "channels", "stream deck"
+        "live tv", "iptv", "open tv", "channels", "stream deck", "open cinema"
+    ],
+    "play_nasa": [
+        "watch nasa", "open nasa tv", "nasa live", "space cam", "iss live"
+    ],
+    "play_news": [
+        "watch news", "open dw news", "world news", "news broadcast"
     ],
     "mode_arcade": [
         "open arcade", "retro games", "game room"
@@ -110,6 +119,8 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
     Generates instant, deterministic structured response in < 5ms.
     """
     start_t = time.perf_counter()
+    theme = "obsidian_cyan"
+    extra_data = {}
 
     if action == "system_health":
         ram = check_ram_guard()
@@ -233,13 +244,49 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
         screen = "living_surface"
 
     elif action == "mode_sanctuary":
+        from aeonix.core.sanctuary import engage_sanctuary
+        res = engage_sanctuary(actor=actor)
         speech = "Sanctuary Mode engaged. External connections throttled. Local vault sealed."
         card = {
             "title": "SANCTUARY ACTIVE",
-            "content": "Defensive posture enabled.\nNetwork isolated.",
+            "content": "Defensive posture enabled.\nNetwork isolated.\nVault sealed.",
             "type": "alert"
         }
         screen = "sanctuary"
+        theme = "obsidian_crimson"
+        extra_data["sanctuary"] = res
+
+    elif action == "mode_sanctuary_release":
+        from aeonix.core.sanctuary import release_sanctuary
+        res = release_sanctuary(actor=actor)
+        speech = "Sanctuary Mode released. Standard living surface active."
+        card = {
+            "title": "SANCTUARY RELEASED",
+            "content": "Living surface restored.\nAll subsystems nominal.",
+            "type": "standard"
+        }
+        screen = "living_surface"
+        theme = "obsidian_cyan"
+        extra_data["sanctuary"] = res
+
+    elif action in ("mode_iptv", "play_nasa", "play_news"):
+        from aeonix.core.spectra import find_channel_by_query, set_playback_state
+        target_q = "nasa" if action == "play_nasa" else ("news" if action == "play_news" else "iss")
+        ch = find_channel_by_query(target_q)
+        set_playback_state(True, ch)
+        speech = f"Opening Cinema Deck for {ch['name']}."
+        card = {
+            "title": f"Cinema Deck // {ch['name']}",
+            "content": f"Category: {ch['category']}\nStream: Verified HLS Live\nResolution: 1080p Stream",
+            "type": "media"
+        }
+        screen = "cinema"
+        theme = "obsidian_cyan"
+        extra_data["media_play"] = {
+            "stream_url": ch["stream_url"],
+            "title": ch["name"],
+            "category": ch["category"]
+        }
 
     elif action.startswith("mode_"):
         mode_name = action.replace("mode_", "")
@@ -258,14 +305,16 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
 
     elapsed_ms = round((time.perf_counter() - start_t) * 1000, 2)
 
-    return {
+    res = {
         "tier": "Tier 0 (Fast-Path Router)",
         "action": action,
         "latency_ms": elapsed_ms,
         "speech": speech,
         "layout_intent": {
             "screen": screen,
-            "theme": "obsidian_cyan",
+            "theme": theme,
             "cards": [card]
         }
     }
+    res.update(extra_data)
+    return res

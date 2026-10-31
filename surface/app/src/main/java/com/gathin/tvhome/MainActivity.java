@@ -206,6 +206,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView weatherHud;
     private com.gathin.tvhome.hud.WeatherEngine weatherEngine;
     private AeonixWebSocketClient aeonixClient;
+    private boolean isSanctuaryActive = false;
     private List<RaceWeekend.Race> raceCalendar;
     private View racePanel;
     private TextView raceKicker, raceHeadline, raceSessions;
@@ -1643,6 +1644,64 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     com.gathin.tvhome.audio.CyberSoundSynth.get().playPowerUp();
                 } catch (Exception ignored) {}
                 Toast.makeText(this, "AADYA: " + reply, Toast.LENGTH_LONG).show();
+            } else if ("media_play".equals(type)) {
+                String streamUrl = obj.optString("stream_url");
+                String title = obj.optString("title", "Live Stream");
+                String category = obj.optString("category", "Cinema Deck");
+                runOnUiThread(() -> {
+                    showIptv();
+                    if (!iptvFullscreenMode) {
+                        toggleIptvFullscreen();
+                    }
+                    com.gathin.tvhome.iptv.Channel ch = new com.gathin.tvhome.iptv.Channel(
+                            "stream_custom", title, category, "Global", "", streamUrl);
+                    playChannel(ch);
+                    Toast.makeText(this, "CINEMA DECK: " + title, Toast.LENGTH_SHORT).show();
+                });
+            } else if ("media_control".equals(type)) {
+                String cmd = obj.optString("command", "pause");
+                runOnUiThread(() -> {
+                    if ("pause".equals(cmd) && iptvVideoView != null && iptvVideoView.isPlaying()) {
+                        iptvVideoView.pause();
+                        Toast.makeText(this, "MEDIA PAUSED", Toast.LENGTH_SHORT).show();
+                    } else if (("resume".equals(cmd) || "play".equals(cmd)) && iptvVideoView != null && !iptvVideoView.isPlaying()) {
+                        iptvVideoView.start();
+                        Toast.makeText(this, "MEDIA RESUMED", Toast.LENGTH_SHORT).show();
+                    } else if ("stop".equals(cmd) || "halt".equals(cmd)) {
+                        stopIptvPlayback();
+                        hideOverlays();
+                        Toast.makeText(this, "MEDIA STOPPED", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } else if ("sanctuary_mode".equals(type)) {
+                boolean active = obj.optBoolean("active", false);
+                runOnUiThread(() -> {
+                    isSanctuaryActive = active;
+                    if (active) {
+                        hideOverlays();
+                        try {
+                            com.gathin.tvhome.audio.CyberSoundSynth.get().playLaser();
+                        } catch (Exception ignored) {}
+                        if (heroName != null) {
+                            heroName.setText("SANCTUARY ACTIVE");
+                        }
+                        if (heroCategoryText != null) {
+                            heroCategoryText.setText("★ DEFENSIVE POSTURE ENGAGED // VAULT SEALED");
+                        }
+                        Toast.makeText(this, "🛡️ SANCTUARY LOCKDOWN ENGAGED", Toast.LENGTH_LONG).show();
+                    } else {
+                        try {
+                            com.gathin.tvhome.audio.CyberSoundSynth.get().playPowerUp();
+                        } catch (Exception ignored) {}
+                        if (heroName != null) {
+                            heroName.setText("ÆONIX PRISM");
+                        }
+                        if (heroCategoryText != null) {
+                            heroCategoryText.setText("★ SOVEREIGN INTELLIGENCE NOMINAL");
+                        }
+                        Toast.makeText(this, "SANCTUARY RELEASED", Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         } catch (Exception e) {
             android.util.Log.e("AeonixLauncher", "Payload parse error: " + e.getMessage());
@@ -1746,6 +1805,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         // Push-to-Talk (PTT) Mic key handling
         if (code == KeyEvent.KEYCODE_SEARCH || code == KeyEvent.KEYCODE_VOICE_ASSIST) {
+            if (isSanctuaryActive) {
+                if (action == KeyEvent.ACTION_DOWN) {
+                    Toast.makeText(this, "🛡️ MIC MUTED: SANCTUARY ACTIVE", Toast.LENGTH_SHORT).show();
+                }
+                return true;
+            }
             if (action == KeyEvent.ACTION_DOWN) {
                 if (aeonixClient != null && !aeonixClient.isVoiceRecording()) {
                     aeonixClient.startVoiceRecording();
