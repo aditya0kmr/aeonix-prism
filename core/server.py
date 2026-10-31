@@ -211,6 +211,13 @@ async def post_intent(request):
                     "type": "media_control",
                     "command": cmd
                 })
+            elif "layout_intent" in intent_result:
+                await broadcast_message({
+                    "type": "layout_intent",
+                    "action": intent_result.get("action", ""),
+                    "speech": intent_result.get("speech", ""),
+                    **intent_result["layout_intent"]
+                })
 
             return JSONResponse(intent_result)
 
@@ -241,6 +248,12 @@ async def post_intent(request):
                 "cards": [{"title": "AADYA", "content": llm_text, "type": "dialogue"}]
             }
         }
+        await broadcast_message({
+            "type": "layout_intent",
+            "action": "aadya_dialogue",
+            "speech": llm_text,
+            **intent_result["layout_intent"]
+        })
         return JSONResponse(intent_result)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)

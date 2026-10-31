@@ -76,6 +76,7 @@ import android.widget.Toast;
 import android.widget.VideoView;
 import android.media.MediaPlayer;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import com.gathin.tvhome.net.AeonixWebSocketClient;
 
 import androidx.annotation.NonNull;
@@ -1644,6 +1645,71 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     com.gathin.tvhome.audio.CyberSoundSynth.get().playPowerUp();
                 } catch (Exception ignored) {}
                 Toast.makeText(this, "AADYA: " + reply, Toast.LENGTH_LONG).show();
+            } else if ("layout_intent".equals(type)) {
+                String screen = obj.optString("screen", "living_surface");
+                String theme = obj.optString("theme", "obsidian_cyan");
+                String speech = obj.optString("speech", "");
+                String actionName = obj.optString("action", "");
+                JSONArray cards = obj.optJSONArray("cards");
+
+                runOnUiThread(() -> {
+                    // 1. Acoustic confirmation cue
+                    try {
+                        com.gathin.tvhome.audio.CyberSoundSynth.get().playChirp();
+                    } catch (Exception ignored) {}
+
+                    // 2. Extract Card Title and Content
+                    String cardTitle = "ÆONIX // " + (actionName.isEmpty() ? "INTEL" : actionName.toUpperCase(Locale.ROOT));
+                    String cardContent = speech;
+                    if (cards != null && cards.length() > 0) {
+                        JSONObject firstCard = cards.optJSONObject(0);
+                        if (firstCard != null) {
+                            cardTitle = firstCard.optString("title", cardTitle);
+                            cardContent = firstCard.optString("content", cardContent);
+                        }
+                    }
+
+                    // 3. Smooth UI/UX Animations: Alpha cross-fade
+                    final String finalTitle = cardTitle;
+                    final String finalContent = cardContent;
+                    if (heroName != null) {
+                        heroName.animate().alpha(0f).setDuration(120).withEndAction(() -> {
+                            heroName.setText(finalTitle);
+                            heroName.animate().alpha(1f).setDuration(220).start();
+                        }).start();
+                    }
+                    if (heroCategoryText != null) {
+                        heroCategoryText.animate().alpha(0f).setDuration(120).withEndAction(() -> {
+                            heroCategoryText.setText("★ " + finalContent.toUpperCase(Locale.ROOT));
+                            heroCategoryText.animate().alpha(1f).setDuration(220).start();
+                        }).start();
+                    }
+
+                    // 4. World Screen Routing with smooth transitions
+                    if ("cinema".equals(screen)) {
+                        showIptv();
+                    } else if ("focus".equals(screen) || "command_deck".equals(screen) || "guardian".equals(screen) || "nexus_room".equals(screen)) {
+                        showTerminal();
+                        if (terminalLogText != null) {
+                            terminalLogText.setText("=== ÆONIX PRISM // " + screen.toUpperCase(Locale.ROOT) + " ===\n\n" +
+                                    "TITLE: " + finalTitle + "\n" +
+                                    "ACTION: " + actionName + "\n\n" +
+                                    "TELEMETRY & CONTENT:\n" + finalContent + "\n\n" +
+                                    "SPEECH: " + speech + "\n" +
+                                    "TIMESTAMP: " + System.currentTimeMillis() + "\n\n" +
+                                    "=== END OF LIVE HUD BRIEF ===");
+                        }
+                    } else if ("arcade".equals(screen)) {
+                        showArcade();
+                    } else {
+                        // living_surface - ensure clean return
+                        hideOverlays();
+                    }
+
+                    if (!speech.isEmpty()) {
+                        Toast.makeText(this, speech, Toast.LENGTH_SHORT).show();
+                    }
+                });
             } else if ("media_play".equals(type)) {
                 String streamUrl = obj.optString("stream_url");
                 String title = obj.optString("title", "Live Stream");
