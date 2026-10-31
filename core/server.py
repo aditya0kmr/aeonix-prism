@@ -214,90 +214,11 @@ async def get_briefing(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-async def post_intent(request):
-    """
-    Two-Tier Intent Router:
-    1. Fast-Path Dictionary / SequenceMatcher (<0.01s, 0% LLM load).
-    2. Local Qwen2.5-0.5B Micro-Prompt (<50 tokens, burst-execution).
-    """
-    try:
-        body = await request.json()
-        user_query = body.get("query", "").strip()
-        actor = body.get("actor", "Aadi")
+import secrets
+from concurrent.futures import ThreadPoolExecutor
 
-        if not user_query:
-            return JSONResponse({"error": "Empty query"}, status_code=400)
-
-        # Tier 0: Fast-Path match
-        fast_match = match_fast_path(user_query)
-        if fast_match:
-            action_name, confidence = fast_match
-            intent_result = execute_fast_path(action_name, actor=actor)
-            intent_result["confidence"] = confidence
-
-            # Phase 4 Broadcast triggers for Glass Terminal
-            if "media_play" in intent_result:
-                await broadcast_message({
-                    "type": "media_play",
-                    **intent_result["media_play"]
-                })
-            elif "sanctuary" in intent_result:
-                await broadcast_message({
-                    "type": "sanctuary_mode",
-                    "active": intent_result["sanctuary"]["is_active"]
-                })
-            elif intent_result.get("action", "").startswith("media_"):
-                cmd = intent_result["action"].replace("media_", "")
-                await broadcast_message({
-                    "type": "media_control",
-                    "command": cmd
-                })
-            elif "layout_intent" in intent_result:
-                await broadcast_message({
-                    "type": "layout_intent",
-                    "action": intent_result.get("action", ""),
-                    "speech": intent_result.get("speech", ""),
-                    **intent_result["layout_intent"]
-                })
-
-            return JSONResponse(intent_result)
-
-        # Tier 1: Local Qwen2.5-0.5B Micro-Prompt (<50 tokens)
-        system_micro_prompt = (
-            "You are AADYA, devoted personal intelligence for Aadi. "
-            "Reply strictly under 35 words. Loyal, concise, sovereign."
-        )
-        messages = [
-            {"role": "system", "content": system_micro_prompt},
-            {"role": "user", "content": user_query}
-        ]
-        
-        # Max 40 tokens generation for extreme speed and low compute
-        llm_text = llama_runner.generate(messages, max_tokens=40, temperature=0.6)
-        if not llm_text:
-            llm_text = "I am standing by for your directive, Aadi."
-        else:
-            llama_runner.stop_server()
-
-        intent_result = {
-            "tier": "Tier 1 (Qwen2.5 Micro-Prompt)",
-            "action": "aadya_dialogue",
-            "speech": llm_text,
-            "layout_intent": {
-                "screen": "living_surface",
-                "theme": "obsidian_cyan",
-                "cards": [{"title": "AADYA", "content": llm_text, "type": "dialogue"}]
-            }
-        }
-        await broadcast_message({
-            "type": "layout_intent",
-            "action": "aadya_dialogue",
-            "speech": llm_text,
-            **intent_result["layout_intent"]
-        })
-        return JSONResponse(intent_result)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+heavy_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="aeonix_worker")
+llm_inference_lock = asyncio.Lock()
 
 async def broadcast_message(message: dict):
     payload = json.dumps(message)
@@ -310,13 +231,138 @@ async def broadcast_message(message: dict):
     for dead in dead_connections:
         active_connections.discard(dead)
 
+async def process_intent_pipeline(
+    user_query: str, 
+    actor: str = "Aadi", 
+    actor_role: str = ROLE_POCO_CORE,
+    correlation_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Unified Request Pipeline for REST and Voice:
+    - Normalizes incoming queries.
+    - Tier 0: Fast-Path match (<0.01s).
+    - Tier 1: Local LLM generation offloaded to heavy_executor guarded by llm_inference_lock.
+    - Synchronizes Living Surface HUD broadcasts across all connected glass terminals.
+    """
+    t0 = time.perf_counter()
+    if not correlation_id:
+        correlation_id = f"req_{int(time.time()*1000)}_{secrets.token_hex(3)}"
+
+    clean_query = user_query.strip()
+    if not clean_query:
+        return {"success": False, "error": "Empty query", "correlation_id": correlation_id}
+
+    # Tier 0: Fast-Path Match
+    fast_match = match_fast_path(clean_query)
+    if fast_match:
+        action_name, confidence = fast_match
+        intent_result = execute_fast_path(action_name, actor=actor)
+        intent_result["confidence"] = confidence
+        intent_result["tier"] = "Tier 0 (Fast-Path)"
+        intent_result["correlation_id"] = correlation_id
+        intent_result["query"] = clean_query
+        intent_result["latency_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+
+        # Broadcast UI layout events to all connected Glass terminals
+        if "media_play" in intent_result:
+            await broadcast_message({
+                "type": "media_play",
+                **intent_result["media_play"]
+            })
+        elif "sanctuary" in intent_result:
+            await broadcast_message({
+                "type": "sanctuary_mode",
+                "active": intent_result["sanctuary"]["is_active"]
+            })
+        elif intent_result.get("action", "").startswith("media_"):
+            cmd = intent_result["action"].replace("media_", "")
+            await broadcast_message({
+                "type": "media_control",
+                "command": cmd
+            })
+        elif "layout_intent" in intent_result:
+            await broadcast_message({
+                "type": "layout_intent",
+                "action": intent_result.get("action", ""),
+                "speech": intent_result.get("speech", ""),
+                **intent_result["layout_intent"]
+            })
+
+        return intent_result
+
+    # Tier 1: Local Qwen2.5-0.5B Micro-Prompt via async worker + Lock
+    system_micro_prompt = (
+        "You are AADYA, devoted personal intelligence for Aadi. "
+        "Reply strictly under 35 words. Loyal, concise, sovereign."
+    )
+    messages = [
+        {"role": "system", "content": system_micro_prompt},
+        {"role": "user", "content": clean_query}
+    ]
+
+    loop = asyncio.get_event_loop()
+    try:
+        async with llm_inference_lock:
+            def _run_llm():
+                text = llama_runner.generate(messages, max_tokens=40, temperature=0.6)
+                llama_runner.stop_server()
+                return text
+
+            llm_text = await loop.run_in_executor(heavy_executor, _run_llm)
+    except Exception as e:
+        llm_text = None
+
+    if not llm_text:
+        llm_text = "I am standing by for your directive, Aadi."
+
+    intent_result = {
+        "success": True,
+        "tier": "Tier 1 (Qwen2.5 Micro-Prompt)",
+        "action": "aadya_dialogue",
+        "speech": llm_text,
+        "query": clean_query,
+        "correlation_id": correlation_id,
+        "latency_ms": round((time.perf_counter() - t0) * 1000, 2),
+        "layout_intent": {
+            "screen": "living_surface",
+            "theme": "obsidian_cyan",
+            "cards": [{"title": "AADYA", "content": llm_text, "type": "dialogue"}]
+        }
+    }
+
+    await broadcast_message({
+        "type": "layout_intent",
+        "action": "aadya_dialogue",
+        "speech": llm_text,
+        **intent_result["layout_intent"]
+    })
+
+    return intent_result
+
+async def post_intent(request):
+    """Processes natural language intent via the unified request pipeline."""
+    try:
+        caller, role = get_request_identity(request)
+        body = await request.json()
+        user_query = body.get("query", "").strip()
+        actor = body.get("actor", caller)
+
+        if not user_query:
+            return JSONResponse({"error": "Empty query"}, status_code=400)
+
+        result = await process_intent_pipeline(user_query, actor=actor, actor_role=role)
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 async def post_voice_transcribe(request):
-    """Processes uploaded raw PCM or WAV audio and returns offline transcription."""
+    """Processes uploaded raw PCM or WAV audio and returns offline transcription via async worker."""
     try:
         body = await request.body()
         if not body:
             return JSONResponse({"error": "Empty audio payload"}, status_code=400)
-        text = transcribe_pcm(body)
+        loop = asyncio.get_event_loop()
+        text = await loop.run_in_executor(heavy_executor, transcribe_pcm, body)
         log_audit_event("REST_API", "voice_transcribed", "whisper_tiny", "ok", {"query": text})
         return JSONResponse({"success": True, "transcription": text})
     except Exception as e:
@@ -406,45 +452,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif msg_type == "audio_end":
                     await websocket.send_text(json.dumps({"type": "audio_status", "status": "processing"}))
                     if audio_buffer:
-                        query = transcribe_pcm(bytes(audio_buffer))
+                        loop = asyncio.get_event_loop()
+                        query = await loop.run_in_executor(heavy_executor, transcribe_pcm, bytes(audio_buffer))
                         log_audit_event("GLASS_TERMINAL", "voice_command", "whisper_tiny", "ok", {"query": query})
                         
-                        # Fast-Path check first (<0.05ms)
-                        fast_match = match_fast_path(query)
-                        if fast_match:
-                            action_name, confidence = fast_match
-                            intent_result = execute_fast_path(action_name, actor="Aadi")
-                            reply_text = intent_result.get("speech", "")
-                            intent_type = action_name
-                            
-                            # Broadcast layout intent so Fire TV visual updates
-                            if "media_play" in intent_result:
-                                await broadcast_message({
-                                    "type": "media_play",
-                                    **intent_result["media_play"]
-                                })
-                            elif "layout_intent" in intent_result:
-                                await broadcast_message({
-                                    "type": "layout_intent",
-                                    "action": action_name,
-                                    "speech": reply_text,
-                                    **intent_result["layout_intent"]
-                                })
-                        else:
-                            # Micro-prompt Qwen2.5-0.5B inference
-                            messages = [
-                                {"role": "system", "content": "You are AADYA, sovereign AI for Aadi. Answer concisely in under 30 words."},
-                                {"role": "user", "content": query}
-                            ]
-                            reply_text = llama_runner.generate(messages, max_tokens=40, temperature=0.6) or "Understood, Aadi."
-                            llama_runner.stop_server()
-                            intent_type = "deep_query"
+                        pipeline_res = await process_intent_pipeline(query, actor="Aadi", actor_role=ws_role)
+                        reply_text = pipeline_res.get("speech", "")
+                        intent_type = pipeline_res.get("action", "aadya_dialogue")
                         
                         await websocket.send_text(json.dumps({
                             "type": "voice_reply",
                             "query": query,
                             "intent": intent_type,
-                            "reply": reply_text
+                            "reply": reply_text,
+                            "correlation_id": pipeline_res.get("correlation_id", "")
                         }))
                     audio_buffer = bytearray()
             except json.JSONDecodeError:
@@ -479,7 +500,8 @@ async def post_panoptes_scan(request):
             return JSONResponse(res)
         else:
             domain = body.get("domain", "example.com")
-            graph = run_passive_osint(domain)
+            loop = asyncio.get_event_loop()
+            graph = await loop.run_in_executor(heavy_executor, run_passive_osint, domain)
             return JSONResponse({"success": True, "graph": graph})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -717,7 +739,11 @@ async def post_visia_analyze(request):
         if not file_path or not os.path.exists(file_path):
             return JSONResponse({"error": f"File not found: {file_path}"}, status_code=400)
 
-        analysis = analyze_visual_artifact(file_path, case_id=case_id, run_ocr=run_ocr, actor=actor)
+        loop = asyncio.get_event_loop()
+        analysis = await loop.run_in_executor(
+            heavy_executor,
+            lambda: analyze_visual_artifact(file_path, case_id=case_id, run_ocr=run_ocr, actor=actor)
+        )
         return JSONResponse({"success": True, "analysis": analysis})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -731,7 +757,8 @@ async def post_backup_create(request):
         body = await request.json() if request.headers.get("content-length") else {}
         actor = body.get("actor", "Aadi")
         note = body.get("note", "Operator Backup")
-        res = create_vault_backup(actor=actor, note=note)
+        loop = asyncio.get_event_loop()
+        res = await loop.run_in_executor(heavy_executor, lambda: create_vault_backup(actor=actor, note=note))
         return JSONResponse({"success": True, "backup": res})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -749,7 +776,8 @@ async def post_backup_verify(request):
         path = body.get("file_path")
         if not path or not os.path.exists(path):
             return JSONResponse({"error": f"Backup file not found: {path}"}, status_code=400)
-        res = verify_backup(path)
+        loop = asyncio.get_event_loop()
+        res = await loop.run_in_executor(heavy_executor, verify_backup, path)
         return JSONResponse(res)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -910,6 +938,14 @@ async def post_trust_verify_order(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def get_trust_verify_audit_chain(request):
+    try:
+        from core.db import verify_audit_chain
+        res = verify_audit_chain()
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 async def post_trust_kill_switch(request):
     try:
         auth_role, actor = get_request_identity(request)
@@ -949,8 +985,12 @@ async def post_agents_dispatch(request):
         body = await request.json()
         objective = body.get("objective", "")
         target = body.get("target", "")
+        if not objective:
+            return JSONResponse({"error": "Empty objective"}, status_code=400)
         from agents.orchestrator import orchestrator
-        return JSONResponse(orchestrator.dispatch_mission(objective, target=target))
+        loop = asyncio.get_event_loop()
+        res = await loop.run_in_executor(heavy_executor, lambda: orchestrator.dispatch_mission(objective, target=target))
+        return JSONResponse(res)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -1074,6 +1114,7 @@ app = Starlette(
         Route("/api/atlas/summary", get_atlas_summary, methods=["GET"]),
         Route("/api/trust/signed-order", post_trust_signed_order, methods=["POST"]),
         Route("/api/trust/verify-order", post_trust_verify_order, methods=["POST"]),
+        Route("/api/trust/verify-audit-chain", get_trust_verify_audit_chain, methods=["GET"]),
         Route("/api/trust/kill-switch", post_trust_kill_switch, methods=["POST"]),
         Route("/api/agents/roster", get_agents_roster, methods=["GET"]),
         Route("/api/agents/dispatch", post_agents_dispatch, methods=["POST"]),

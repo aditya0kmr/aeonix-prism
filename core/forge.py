@@ -160,16 +160,20 @@ def draft_command_from_prompt(prompt: str) -> Dict[str, Any]:
 
     op = TYPED_OPERATIONS[op_name]
     cmd_str = f"{op['binary']} {' '.join(op['fixed_args'])}".strip()
+    risk_dict = {
+        "risk_level": op["risk_level"],
+        "risk_tier": op["risk_level"].split("_")[0],
+        "is_consequential": op["is_consequential"],
+        "reason": op["description"],
+        "rationale": op["description"]
+    }
     return {
         "operation": op_name,
         "command": cmd_str,
         "drafted_command": cmd_str,
         "description": op["description"],
-        "risk": {
-            "risk_level": op["risk_level"],
-            "is_consequential": op["is_consequential"],
-            "reason": op["description"]
-        }
+        "risk": risk_dict,
+        "risk_assessment": risk_dict
     }
 
 def execute_typed_operation(

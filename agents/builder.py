@@ -44,6 +44,13 @@ class BuilderAgent(BaseAgent):
             )
 
         exec_res = execute_sandboxed_command(draft["command"])
+        if exec_res.get("status") == "sentinel_gate_hold":
+            return {
+                "status": "sentinel_gate_hold",
+                "command": draft["command"],
+                "request_id": exec_res.get("request_id"),
+                "message": exec_res.get("message")
+            }
         self.log_action("builder_exec", draft["command"], "SUCCESS", exec_res)
 
         return {

@@ -23,23 +23,55 @@ class AadyaIntelligence:
 
     def evaluate_priority(self, proposal: str) -> Dict[str, Any]:
         """
-        Aadi-First Priority Engine: Judges proposal by alignment with Aadi's future, safety, and autonomy.
+        Aadi-First Priority Engine:
+        Evaluates proposal by alignment with Aadi's personal autonomy, system health, and privacy boundaries.
+        Incorporates live hardware telemetry and pending authorization state.
         """
         lower = proposal.lower()
-        positive_factors = ["sovereign", "local", "privacy", "security", "learning", "growth", "build", "freedom"]
-        negative_factors = ["cloud leak", "telemetry", "unauthorized", "tracking", "distraction"]
+        from core.ram_guard import get_ram_status
+        ram_stat = get_ram_status()
+
+        # Check pending approvals
+        pending_rows = query_db("SELECT COUNT(*) FROM sentinel_requests WHERE status = 'pending';")
+        pending_count = pending_rows[0][0] if pending_rows else 0
+
+        positive_factors = ["sovereign", "local", "privacy", "security", "learning", "growth", "build", "freedom", "wal", "offline", "backup", "encrypt"]
+        negative_factors = ["cloud leak", "telemetry", "unauthorized", "tracking", "distraction", "third-party", "commercial", "external api"]
 
         pos_score = sum(1 for p in positive_factors if p in lower)
         neg_score = sum(1 for n in negative_factors if n in lower)
 
+        # Hardware safety constraint
+        is_ram_critical = not ram_stat["is_safe"]
+        if is_ram_critical:
+            neg_score += 2
+
         is_favorable = neg_score == 0 and pos_score > 0
-        verdict = "STRONGLY_ALIGNED" if is_favorable else ("SCRUTINY_REQUIRED" if neg_score > 0 else "NEUTRAL")
+        if neg_score > 1:
+            verdict = "SCRUTINY_REQUIRED"
+            rationale = "High risk of external data leakage or memory exhaustion detected."
+        elif is_ram_critical:
+            verdict = "SCRUTINY_REQUIRED"
+            rationale = "Available RAM is below safe threshold. Defer non-critical compute."
+        elif is_favorable:
+            verdict = "STRONGLY_ALIGNED"
+            rationale = "Directly promotes Aadi's technological autonomy and sovereign infrastructure."
+        else:
+            verdict = "NEUTRAL"
+            rationale = "Proposal does not actively compromise or significantly enhance sovereign baseline."
+
+        betterment_score = round(max(0.1, min(1.0, 0.5 + 0.15 * pos_score - 0.20 * neg_score)), 2)
 
         return {
             "proposal": proposal,
             "verdict": verdict,
-            "aadi_betterment_score": round(max(0.1, min(1.0, 0.5 + 0.15 * pos_score - 0.25 * neg_score)), 2),
-            "rationale": "Directly promotes Aadi's technological autonomy and sovereign infrastructure." if is_favorable else "Exercise caution regarding external reliance or data exposure.",
+            "aadi_betterment_score": betterment_score,
+            "rationale": rationale,
+            "context": {
+                "available_ram_mb": ram_stat.get("available_mb", 0),
+                "pending_sentinel_actions": pending_count,
+                "ram_safe": ram_stat["is_safe"]
+            }
         }
 
     def scan_future_radar(self) -> Dict[str, Any]:

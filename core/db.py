@@ -178,6 +178,33 @@ def init_database(db_path: str = DB_PATH) -> bool:
         mission_id TEXT NOT NULL,
         used_at REAL NOT NULL
     );
+
+    -- Missions Persistence & State Machine
+    CREATE TABLE IF NOT EXISTS missions (
+        id TEXT PRIMARY KEY,
+        objective TEXT NOT NULL,
+        target TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
+        current_phase INTEGER NOT NULL DEFAULT 0,
+        total_phases INTEGER NOT NULL DEFAULT 0,
+        plan_json TEXT NOT NULL,
+        execution_log_json TEXT NOT NULL,
+        report_json TEXT,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    );
+
+    -- Oracle Research & Prediction Ledger
+    CREATE TABLE IF NOT EXISTS research_ledger (
+        id TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        sources_json TEXT NOT NULL,
+        findings_json TEXT NOT NULL,
+        contradictions_json TEXT NOT NULL,
+        prediction_json TEXT,
+        created_at REAL NOT NULL
+    );
     """)
 
     # Seed Sovereign User (Aadi) if not present
@@ -463,3 +490,62 @@ def resolve_sentinel_request(
         conn.rollback()
         conn.close()
         return False, f"TRANSACTION_ERROR: {str(e)}"
+
+def verify_audit_chain(db_path: str = DB_PATH) -> Dict[str, Any]:
+    """
+    Cryptographically verifies the entire audit_log SHA-256 hash chain from genesis to tip.
+    Detects any inserted, modified, or deleted records.
+    """
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT id, timestamp, actor, action, target, result, details_json, previous_hash, current_hash FROM audit_log ORDER BY id ASC;")
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        return {"is_valid": True, "total_events": 0, "status": "EMPTY_CHAIN"}
+
+    expected_prev = "GENESIS_BLOCK_AEONIX_PRISM_v2.0"
+    for i, row in enumerate(rows):
+        # 1. Verify previous hash chaining
+        if i == 0:
+            if row["previous_hash"] != expected_prev:
+                return {
+                    "is_valid": False,
+                    "error": f"Genesis block previous_hash mismatch at row {row['id']}",
+                    "row_id": row["id"],
+                    "expected": expected_prev,
+                    "found": row["previous_hash"]
+                }
+        else:
+            if row["previous_hash"] != expected_prev:
+                return {
+                    "is_valid": False,
+                    "error": f"Hash chain broken at row {row['id']}: previous_hash does not match parent current_hash",
+                    "row_id": row["id"],
+                    "expected": expected_prev,
+                    "found": row["previous_hash"]
+                }
+
+        # 2. Recompute current SHA-256 hash
+        hash_payload = f"{row['previous_hash']}|{row['timestamp']}|{row['actor']}|{row['action']}|{row['target']}|{row['result']}|{row['details_json']}"
+        computed_hash = hashlib.sha256(hash_payload.encode("utf-8")).hexdigest()
+
+        if computed_hash != row["current_hash"]:
+            return {
+                "is_valid": False,
+                "error": f"Content tampering detected at row {row['id']}: computed hash != stored hash",
+                "row_id": row["id"],
+                "computed_hash": computed_hash,
+                "stored_hash": row["current_hash"]
+            }
+
+        expected_prev = row["current_hash"]
+
+    return {
+        "is_valid": True,
+        "total_events": len(rows),
+        "status": "CRYPTOGRAPHICALLY_VERIFIED",
+        "genesis_hash": rows[0]["current_hash"],
+        "tip_hash": rows[-1]["current_hash"]
+    }
