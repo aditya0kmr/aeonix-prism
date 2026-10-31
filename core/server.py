@@ -21,6 +21,16 @@ from aeonix.core.db import (
     queue_sentinel_request,
     resolve_sentinel_request
 )
+from aeonix.core.auth import (
+    verify_token,
+    issue_device_token,
+    ROLE_POCO_CORE,
+    ROLE_FIRETV_GLASS,
+    ROLE_AGENT_EXECUTOR,
+    POCO_CORE_TOKEN,
+    FIRETV_GLASS_TOKEN
+)
+from aeonix.core.trust import trust
 from aeonix.core.ram_guard import check_ram_guard
 from aeonix.core.discovery import AeonixDiscoveryService
 from aeonix.core.llama_runner import llama_runner
@@ -33,11 +43,34 @@ from aeonix.core.guardian import get_network_inventory, async_get_network_invent
 from aeonix.core.atlas_watch import run_supervisor_cycle
 from aeonix.core.spectra import get_channel_catalog, get_current_playback, set_playback_state, find_channel_by_query
 from aeonix.core.sanctuary import engage_sanctuary, release_sanctuary, get_sanctuary_status, is_sanctuary_active
-from aeonix.core.forge import draft_command_from_prompt, execute_sandboxed_command, get_git_telemetry
+from aeonix.core.forge import draft_command_from_prompt, execute_sandboxed_command, execute_typed_operation, get_git_telemetry
 from aeonix.core.visia import analyze_visual_artifact
 from aeonix.core.backup import create_vault_backup, list_backups, verify_backup, generate_emergency_recovery_key
 from aeonix.core.morph import get_pending_proposals, generate_optimization_proposal
 from aeonix.core.council import convene_council_session
+
+def get_request_identity(request) -> Tuple[str, str]:
+    """
+    Derives identity from cryptographically verified bearer token.
+    Returns (role: str, device_id: str).
+    """
+    auth_header = request.headers.get("Authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif "token" in request.query_params:
+        token = request.query_params["token"].strip()
+
+    if token:
+        payload = verify_token(token)
+        if payload:
+            return payload.get("role", "UNKNOWN"), payload.get("device_id", "anonymous")
+
+    client_host = getattr(request.client, "host", "") if request.client else ""
+    if client_host in ("127.0.0.1", "localhost", "::1"):
+        return ROLE_POCO_CORE, "poco_local_console"
+
+    return "UNAUTHENTICATED", "untrusted"
 
 # Connected Fire TV and client WebSockets
 active_connections: Set[WebSocket] = set()
@@ -88,23 +121,31 @@ async def resolve_sentinel(request):
     try:
         body = await request.json()
         req_id = body.get("request_id")
-        approved = bool(body.get("approved"))
-        resolver = body.get("resolver", "Aadi")
-
+        approved = body.get("approved")
+        
         if not req_id:
             return JSONResponse({"error": "Missing request_id"}, status_code=400)
 
-        ok = resolve_sentinel_request(req_id, approved, resolver)
+        if not isinstance(approved, bool):
+            return JSONResponse({"error": "Field 'approved' must be a strict boolean (true/false)"}, status_code=400)
+
+        auth_role, actor = get_request_identity(request)
+        if approved is True and auth_role != ROLE_POCO_CORE:
+            return JSONResponse({
+                "error": "POCO_AUTHORITY_REQUIRED: Approval of consequential actions is restricted strictly to POCO Core Mind"
+            }, status_code=403)
+
+        ok, status_reason = resolve_sentinel_request(req_id, approved, resolver=actor, resolver_role=auth_role)
         if ok:
             # Broadcast resolution event to TV over WebSocket
             await broadcast_message({
                 "type": "sentinel_resolved",
                 "request_id": req_id,
-                "status": "approved" if approved else "denied"
+                "status": status_reason
             })
-            return JSONResponse({"success": True, "request_id": req_id, "approved": approved})
+            return JSONResponse({"success": True, "request_id": req_id, "status": status_reason})
         else:
-            return JSONResponse({"error": "Request not found or expired"}, status_code=404)
+            return JSONResponse({"error": status_reason}, status_code=400)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -282,9 +323,28 @@ async def post_voice_transcribe(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 async def websocket_endpoint(websocket: WebSocket):
+    # Authenticate WebSocket handshake
+    token = websocket.query_params.get("token", "")
+    payload = verify_token(token) if token else None
+    client_host = getattr(websocket.client, "host", "") if websocket.client else ""
+
+    if payload:
+        ws_role = payload.get("role", ROLE_FIRETV_GLASS)
+        ws_device = payload.get("device_id", "paired_device")
+    elif client_host in ("127.0.0.1", "localhost", "::1"):
+        ws_role = ROLE_POCO_CORE
+        ws_device = "poco_local"
+    elif client_host == "10.116.23.179": # Known paired Fire TV glass
+        ws_role = ROLE_FIRETV_GLASS
+        ws_device = "firetv_stick_glass"
+    else:
+        # Reject unauthorized foreign IP
+        await websocket.close(code=4003, reason="Unauthorized device")
+        return
+
     await websocket.accept()
     active_connections.add(websocket)
-    log_audit_event("GLASS_TERMINAL", "connect", "websocket", "ok", {})
+    log_audit_event("GLASS_TERMINAL", "connect", "websocket", "ok", {"device": ws_device, "role": ws_role})
     
     # Audio buffer for PTT voice streaming
     audio_buffer = bytearray()
@@ -298,7 +358,8 @@ async def websocket_endpoint(websocket: WebSocket):
             "title": "ÆONIX PRISM",
             "greeting": "Welcome back, Aadi.",
             "mode": "Sovereign Glass Terminal",
-            "device": "Fire TV Stick Lite",
+            "device": ws_device,
+            "role": ws_role,
             "voice_stt": "READY (100% OFFLINE)"
         }
     }))
@@ -313,16 +374,31 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_text(json.dumps({"type": "pong", "timestamp": time.time()}))
                 elif msg_type == "sentinel_action":
                     req_id = msg.get("request_id")
-                    approved = msg.get("approved", False)
-                    resolve_sentinel_request(req_id, approved, "FireTV_Remote")
-                    await websocket.send_text(json.dumps({
-                        "type": "sentinel_resolved",
-                        "request_id": req_id,
-                        "status": "approved" if approved else "denied"
-                    }))
+                    approved = bool(msg.get("approved", False))
+                    if approved is True and ws_role != ROLE_POCO_CORE:
+                        await websocket.send_text(json.dumps({
+                            "type": "sentinel_rejected",
+                            "request_id": req_id,
+                            "error": "POCO_AUTHORITY_REQUIRED: Approval of consequential actions restricted strictly to POCO Core Mind. TV may only deny/cancel."
+                        }))
+                    else:
+                        ok, status_reason = resolve_sentinel_request(req_id, approved, resolver=ws_device, resolver_role=ws_role)
+                        await websocket.send_text(json.dumps({
+                            "type": "sentinel_resolved",
+                            "request_id": req_id,
+                            "status": status_reason
+                        }))
                 elif msg_type == "audio_start":
-                    audio_buffer = bytearray()
-                    await websocket.send_text(json.dumps({"type": "audio_status", "status": "recording"}))
+                    if is_sanctuary_active():
+                        await websocket.send_text(json.dumps({
+                            "type": "audio_status",
+                            "status": "blocked",
+                            "error": "MIC_INGESTION_DISABLED: Sanctuary Privacy Lockdown is ACTIVE"
+                        }))
+                        audio_buffer = bytearray()
+                    else:
+                        audio_buffer = bytearray()
+                        await websocket.send_text(json.dumps({"type": "audio_status", "status": "recording"}))
                 elif msg_type == "audio_chunk":
                     chunk_b64 = msg.get("data", "")
                     if chunk_b64:
@@ -586,22 +662,38 @@ async def post_forge_draft(request):
 
 async def post_forge_execute(request):
     try:
+        auth_role, actor = get_request_identity(request)
+        if auth_role not in (ROLE_POCO_CORE, ROLE_AGENT_EXECUTOR):
+            return JSONResponse({"error": "UNAUTHORIZED: Execution requires POCO_CORE or AGENT_EXECUTOR role"}, status_code=403)
+
         body = await request.json()
-        command = body.get("command", "")
-        actor = body.get("actor", "Aadi")
+        op_name = body.get("operation") or body.get("command", "")
+        extra_args = body.get("extra_args")
         cwd = body.get("cwd")
-        if not command:
-            return JSONResponse({"error": "Missing command"}, status_code=400)
-        res = execute_sandboxed_command(command, actor=actor, cwd=cwd)
+        sentinel_req_id = body.get("sentinel_request_id")
+
+        if not op_name:
+            return JSONResponse({"error": "Missing 'operation' or 'command' in request"}, status_code=400)
+
+        # Execute typed operation (Zero shell=True)
+        res = execute_typed_operation(
+            operation_name=op_name,
+            extra_args=extra_args,
+            cwd=cwd,
+            sentinel_request_id=sentinel_req_id,
+            actor=actor,
+            actor_role=auth_role
+        )
+
         if res.get("status") == "sentinel_gate_hold":
             await broadcast_message({
                 "type": "sentinel_card",
                 "request_id": res["request_id"],
                 "agent": "FORGE",
-                "action_type": "SHELL_COMMAND",
-                "target": command,
-                "risk_level": res["risk"]["risk_level"],
-                "scope": {"reason": res["risk"]["reason"]}
+                "action_type": f"TYPED_OP_{op_name.upper()}",
+                "target": op_name,
+                "risk_level": "R4_CRITICAL",
+                "scope": {"cwd": cwd or "default", "extra_args": extra_args or []}
             })
         return JSONResponse(res)
     except Exception as e:
@@ -784,23 +876,64 @@ async def get_atlas_summary(request):
 
 async def post_trust_signed_order(request):
     try:
+        auth_role, actor = get_request_identity(request)
+        if auth_role != ROLE_POCO_CORE:
+            return JSONResponse({"error": "POCO_AUTHORITY_REQUIRED: Only POCO Core Mind can issue signed execution orders"}, status_code=403)
+
         body = await request.json()
         mission = body.get("mission", "general_mission")
         scope = body.get("scope", ["vault_read"])
-        from core.trust import trust
-        return JSONResponse({"success": True, "order": trust.generate_signed_order(mission, scope)})
+        target = body.get("target", "local_system")
+        model = body.get("model", "NOVA_LOCAL")
+        user_verified = bool(body.get("user_verified", False))
+
+        order = trust.generate_signed_order(
+            mission_name=mission,
+            scope=scope,
+            target=target,
+            model=model,
+            user_verified=user_verified,
+            actor_role=auth_role
+        )
+        return JSONResponse({"success": True, "order": order})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_trust_verify_order(request):
+    try:
+        body = await request.json()
+        order = body.get("order")
+        if not order:
+            return JSONResponse({"error": "Missing order in request body"}, status_code=400)
+        is_valid, reason = trust.verify_order(order)
+        return JSONResponse({"success": True, "verified": is_valid, "reason": reason})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 async def post_trust_kill_switch(request):
     try:
+        auth_role, actor = get_request_identity(request)
         body = await request.json() if request.headers.get("content-length") else {}
         action = body.get("action", "engage")
-        from core.trust import trust
+        rationale = body.get("rationale", "Operator emergency stop")
+        
         if action == "engage":
-            return JSONResponse({"success": True, "status": trust.trigger_kill_switch()})
+            status = trust.trigger_kill_switch(rationale=rationale, actor_role=auth_role)
+            await broadcast_message({
+                "type": "kill_switch_alert",
+                "state": "ENGAGED",
+                "rationale": rationale
+            })
+            return JSONResponse({"success": True, "status": status})
         else:
-            return JSONResponse({"success": True, "status": trust.reset_kill_switch()})
+            ok, res = trust.reset_kill_switch(actor_role=auth_role)
+            if not ok:
+                return JSONResponse(res, status_code=403)
+            await broadcast_message({
+                "type": "kill_switch_alert",
+                "state": "DISENGAGED"
+            })
+            return JSONResponse({"success": True, "status": res})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -940,6 +1073,7 @@ app = Starlette(
         Route("/api/identity/analyze", post_identity_analyze, methods=["POST"]),
         Route("/api/atlas/summary", get_atlas_summary, methods=["GET"]),
         Route("/api/trust/signed-order", post_trust_signed_order, methods=["POST"]),
+        Route("/api/trust/verify-order", post_trust_verify_order, methods=["POST"]),
         Route("/api/trust/kill-switch", post_trust_kill_switch, methods=["POST"]),
         Route("/api/agents/roster", get_agents_roster, methods=["GET"]),
         Route("/api/agents/dispatch", post_agents_dispatch, methods=["POST"]),

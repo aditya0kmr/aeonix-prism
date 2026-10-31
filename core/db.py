@@ -157,6 +157,27 @@ def init_database(db_path: str = DB_PATH) -> bool:
     CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
     CREATE INDEX IF NOT EXISTS idx_rel_source ON entity_relations(source_id);
     CREATE INDEX IF NOT EXISTS idx_rel_target ON entity_relations(target_id);
+
+    -- Sovereign System State Persistence (survives process restart)
+    CREATE TABLE IF NOT EXISTS system_state (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at REAL NOT NULL
+    );
+
+    -- Cryptographic Token Revocation
+    CREATE TABLE IF NOT EXISTS revoked_tokens (
+        nonce TEXT PRIMARY KEY,
+        revoked_at REAL NOT NULL,
+        reason TEXT
+    );
+
+    -- Execution Order Nonces (Replay Attack Prevention)
+    CREATE TABLE IF NOT EXISTS execution_order_nonces (
+        nonce TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        used_at REAL NOT NULL
+    );
     """)
 
     # Seed Sovereign User (Aadi) if not present
@@ -179,9 +200,21 @@ def init_database(db_path: str = DB_PATH) -> bool:
     conn.close()
     return True
 
-def log_audit_event(actor: str, action: str, target: str, result: str, details: Dict[str, Any], db_path: str = DB_PATH) -> str:
+def log_audit_event(
+    actor: str, 
+    action: str, 
+    target: str, 
+    result: str, 
+    details: Dict[str, Any], 
+    db_path: str = DB_PATH,
+    conn: Optional[sqlite3.Connection] = None
+) -> str:
     """Appends an event to audit_log with cryptographic SHA-256 hash chaining."""
-    conn = get_connection(db_path)
+    should_close = False
+    if conn is None:
+        conn = get_connection(db_path)
+        should_close = True
+        
     cur = conn.cursor()
     
     cur.execute("SELECT current_hash FROM audit_log ORDER BY id DESC LIMIT 1;")
@@ -198,8 +231,9 @@ def log_audit_event(actor: str, action: str, target: str, result: str, details: 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?);
     """, (now, actor, action, target, result, details_str, prev_hash, current_hash))
 
-    conn.commit()
-    conn.close()
+    if should_close:
+        conn.commit()
+        conn.close()
     return current_hash
 
 def queue_sentinel_request(agent: str, action_class: str, action_type: str, target: str, scope: Dict[str, Any], risk_level: str, ttl_seconds: int = 300, db_path: str = DB_PATH, timeout_seconds: Optional[int] = None) -> str:
@@ -251,35 +285,181 @@ def execute_db(query: str, args: tuple = (), db_path: str = DB_PATH) -> int:
     conn.close()
     return lastrowid
 
-def resolve_sentinel_request(req_id: str, approved: bool, resolver: str = "Aadi", db_path: str = DB_PATH) -> bool:
-    """Resolves a pending Sentinel request (Approved or Denied)."""
+def get_system_state(key: str, default: Any = None, db_path: str = DB_PATH) -> Any:
+    """Retrieves persisted sovereign system state across reboots."""
     conn = get_connection(db_path)
     cur = conn.cursor()
-
-    cur.execute("SELECT * FROM sentinel_requests WHERE id = ?;", (req_id,))
+    cur.execute("SELECT value_json FROM system_state WHERE key = ?;", (key,))
     row = cur.fetchone()
-    if not row:
-        conn.close()
-        return False
+    conn.close()
+    if row:
+        try:
+            return json.loads(row["value_json"])
+        except Exception:
+            return row["value_json"]
+    return default
 
-    status = "approved" if approved else "denied"
-    now = time.time()
-
-    audit_hash = log_audit_event(
-        actor=resolver,
-        action=f"sentinel_request_{status}",
-        target=row["target"],
-        result=status,
-        details={"request_id": req_id, "risk_level": row["risk_level"]},
-        db_path=db_path
-    )
-
+def set_system_state(key: str, value: Any, db_path: str = DB_PATH):
+    """Persists sovereign system state across reboots."""
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    val_json = json.dumps(value)
     cur.execute("""
-        UPDATE sentinel_requests 
-        SET status = ?, approved_by = ?, approved_at = ?, audit_hash = ?
-        WHERE id = ?;
-    """, (status, resolver, now, audit_hash, req_id))
+        INSERT INTO system_state (key, value_json, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at;
+    """, (key, val_json, time.time()))
+    conn.commit()
+    conn.close()
 
+def is_token_revoked(nonce: str, db_path: str = DB_PATH) -> bool:
+    """Checks if a cryptographic token nonce has been revoked."""
+    if not nonce:
+        return True
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT nonce FROM revoked_tokens WHERE nonce = ?;", (nonce,))
+    revoked = cur.fetchone() is not None
+    conn.close()
+    return revoked
+
+def revoke_token(nonce: str, reason: str = "Operator Revocation", db_path: str = DB_PATH) -> bool:
+    """Revokes a cryptographic token nonce permanently."""
+    if not nonce:
+        return False
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute("INSERT OR REPLACE INTO revoked_tokens (nonce, revoked_at, reason) VALUES (?, ?, ?);",
+                (nonce, time.time(), reason))
+    conn.commit()
+    conn.close()
+    log_audit_event("SECURITY", "revoke_token", nonce, "revoked", {"reason": reason}, db_path=db_path)
+    return True
+
+def record_order_nonce(nonce: str, mission_id: str, db_path: str = DB_PATH) -> bool:
+    """
+    Records an execution order nonce. Returns True if recorded (nonce fresh),
+    or False if nonce was already used (prevents replay attacks).
+    """
+    if not nonce:
+        return False
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT nonce FROM execution_order_nonces WHERE nonce = ?;", (nonce,))
+    if cur.fetchone():
+        conn.close()
+        return False # Replay detected!
+    
+    cur.execute("INSERT INTO execution_order_nonces (nonce, mission_id, used_at) VALUES (?, ?, ?);",
+                (nonce, mission_id, time.time()))
     conn.commit()
     conn.close()
     return True
+
+def check_sentinel_authorization(req_id: str, db_path: str = DB_PATH) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    """
+    Checks authorization state immediately before execution.
+    Returns (is_authorized: bool, request_dict: Optional[dict], reason: str).
+    """
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM sentinel_requests WHERE id = ?;", (req_id,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return False, None, "REQUEST_NOT_FOUND"
+
+    req_dict = dict(row)
+    now = time.time()
+    if req_dict["status"] != "approved":
+        return False, req_dict, f"NOT_APPROVED (current status: {req_dict['status']})"
+
+    if now > req_dict["expires_at"]:
+        return False, req_dict, "AUTHORIZATION_EXPIRED"
+
+    return True, req_dict, "AUTHORIZED"
+
+def resolve_sentinel_request(
+    req_id: str, 
+    approved: bool, 
+    resolver: str = "Aadi", 
+    resolver_role: str = "POCO_CORE",
+    db_path: str = DB_PATH
+) -> Tuple[bool, str]:
+    """
+    Atomically resolves a pending Sentinel request (Approved or Denied).
+    Mandates:
+    - Only POCO_CORE role can grant approval.
+    - FIRETV_GLASS can deny/cancel, but cannot approve consequential actions.
+    - Strict boolean validation.
+    - Rejects expired and already-resolved requests.
+    Returns (success: bool, status_reason: str).
+    """
+    if not isinstance(approved, bool):
+        return False, "INVALID_INPUT: approved must be a strict boolean"
+
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    now = time.time()
+
+    try:
+        # Atomic lock
+        cur.execute("BEGIN IMMEDIATE;")
+        cur.execute("SELECT * FROM sentinel_requests WHERE id = ?;", (req_id,))
+        row = cur.fetchone()
+
+        if not row:
+            conn.rollback()
+            conn.close()
+            return False, "REQUEST_NOT_FOUND"
+
+        if row["status"] != "pending":
+            conn.rollback()
+            conn.close()
+            return False, f"ALREADY_RESOLVED: Status is already '{row['status']}'"
+
+        if now > row["expires_at"]:
+            # Auto-expire
+            cur.execute("UPDATE sentinel_requests SET status = 'expired' WHERE id = ?;", (req_id,))
+            log_audit_event("SENTINEL", "auto_expire", req_id, "expired", {"expired_at": now}, db_path=db_path, conn=conn)
+            conn.commit()
+            conn.close()
+            return False, "EXPIRED: Request TTL has elapsed"
+
+        if approved is True and resolver_role != "POCO_CORE":
+            log_audit_event(
+                actor=resolver,
+                action="unauthorized_approval_attempt",
+                target=row["target"],
+                result="rejected",
+                details={"request_id": req_id, "resolver_role": resolver_role, "reason": "POCO-only approval authority mandate"},
+                db_path=db_path,
+                conn=conn
+            )
+            conn.commit()
+            conn.close()
+            return False, "POCO_AUTHORITY_REQUIRED: Approval restricted strictly to POCO Core Mind"
+
+        status = "approved" if approved else "denied"
+        audit_hash = log_audit_event(
+            actor=f"{resolver} ({resolver_role})",
+            action=f"sentinel_request_{status}",
+            target=row["target"],
+            result=status,
+            details={"request_id": req_id, "risk_level": row["risk_level"], "role": resolver_role},
+            db_path=db_path,
+            conn=conn
+        )
+
+        cur.execute("""
+            UPDATE sentinel_requests 
+            SET status = ?, approved_by = ?, approved_at = ?, audit_hash = ?
+            WHERE id = ?;
+        """, (status, f"{resolver} ({resolver_role})", now, audit_hash, req_id))
+
+        conn.commit()
+        conn.close()
+        return True, status
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return False, f"TRANSACTION_ERROR: {str(e)}"
