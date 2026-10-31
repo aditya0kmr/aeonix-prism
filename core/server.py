@@ -448,7 +448,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif msg_type == "audio_chunk":
                     chunk_b64 = msg.get("data", "")
                     if chunk_b64:
-                        audio_buffer.extend(base64.b64decode(chunk_b64))
+                        decoded = base64.b64decode(chunk_b64)
+                        # Bound audio buffer size to 1MB max to prevent memory exhaustion attacks
+                        MAX_AUDIO_BUFFER_BYTES = 1024 * 1024
+                        if len(audio_buffer) + len(decoded) <= MAX_AUDIO_BUFFER_BYTES:
+                            audio_buffer.extend(decoded)
+                        else:
+                            print(f"[WebSocket] Audio buffer reached safety ceiling ({MAX_AUDIO_BUFFER_BYTES} bytes). Chunk dropped.")
+
                 elif msg_type == "audio_end":
                     await websocket.send_text(json.dumps({"type": "audio_status", "status": "processing"}))
                     if audio_buffer:
@@ -1066,10 +1073,69 @@ async def get_advanced_nexus_room(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def get_router_status_endpoint(request):
+    try:
+        from aeonix.core.router import get_router_status
+        return JSONResponse({"success": True, "router": get_router_status()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_ai_benchmark(request):
+    try:
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        mode = body.get("mode", "fast")
+        prompt = body.get("prompt", "Explain sovereign computation in one concise sentence.")
+        loop = asyncio.get_event_loop()
+        async with llm_inference_lock:
+            bench = await loop.run_in_executor(
+                heavy_executor, 
+                lambda: llama_runner.benchmark(model_mode=mode, prompt=prompt)
+            )
+        return JSONResponse(bench)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_panoptes_report_endpoint(request):
+    try:
+        domain = request.query_params.get("domain", "example.com")
+        from aeonix.core.panoptes import generate_osint_report
+        loop = asyncio.get_event_loop()
+        rep = await loop.run_in_executor(heavy_executor, generate_osint_report, domain)
+        return JSONResponse({"success": True, "report": rep})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_veritas_timeline_endpoint(request):
+    try:
+        case_id = request.query_params.get("case_id")
+        if not case_id:
+            return JSONResponse({"error": "case_id query parameter required"}, status_code=400)
+        from aeonix.core.veritas import build_case_timeline
+        return JSONResponse({"success": True, "case_id": case_id, "timeline": build_case_timeline(case_id)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_veritas_export_endpoint(request):
+    try:
+        body = await request.json()
+        case_id = body.get("case_id")
+        if not case_id:
+            return JSONResponse({"error": "case_id required"}, status_code=400)
+        from aeonix.core.veritas import export_case_report
+        return JSONResponse(export_case_report(case_id))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 app = Starlette(
     routes=[
         Route("/api/status", get_status, methods=["GET"]),
+        Route("/api/router/status", get_router_status_endpoint, methods=["GET"]),
+        Route("/api/ai/benchmark", post_ai_benchmark, methods=["POST"]),
+        Route("/api/panoptes/report", get_panoptes_report_endpoint, methods=["GET"]),
+        Route("/api/veritas/timeline", get_veritas_timeline_endpoint, methods=["GET"]),
+        Route("/api/veritas/export", post_veritas_export_endpoint, methods=["POST"]),
         Route("/api/sentinel/pending", list_sentinel_pending, methods=["GET"]),
+
         Route("/api/sentinel/create", create_sentinel, methods=["POST"]),
         Route("/api/sentinel/resolve", resolve_sentinel, methods=["POST"]),
         Route("/api/memory/remember", post_memory, methods=["POST"]),

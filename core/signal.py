@@ -6,12 +6,10 @@ and anomalous temporal clusters.
 
 import time
 from typing import Dict, Any, List
-from core.db import query_db
-
-
-import time
-from typing import Dict, Any, List
-from core.db import query_db, log_audit_event
+try:
+    from aeonix.core.db import query_db, log_audit_event
+except ImportError:
+    from core.db import query_db, log_audit_event
 
 
 class SignalPatternDetector:

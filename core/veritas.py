@@ -211,7 +211,168 @@ def generate_case_manifest(case_id: str) -> Dict[str, Any]:
         "evidence_items": items
     }
 
+def build_case_timeline(case_id: str) -> List[Dict[str, Any]]:
+    """
+    Builds a unified, chronological timeline of an investigation case.
+    Merges case creation, evidence chain-of-custody events, and related audit log actions.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT * FROM cases WHERE id = ?;", (case_id,))
+    case_row = cur.fetchone()
+    if not case_row:
+        conn.close()
+        return []
+        
+    timeline = []
+    
+    # 1. Genesis event: Case Creation
+    timeline.append({
+        "timestamp": case_row["created_at"],
+        "event_type": "CASE_CREATED",
+        "actor": case_row["created_by"],
+        "description": f"Case opened: {case_row['title']}",
+        "details": {"legal_basis": case_row["legal_basis"]}
+    })
+    
+    # 2. Evidence events and chain-of-custody steps
+    cur.execute("SELECT * FROM evidence WHERE case_id = ?;", (case_id,))
+    evidence_rows = cur.fetchall()
+    evidence_ids = [e["id"] for e in evidence_rows]
+    
+    for ev in evidence_rows:
+        chain = json.loads(ev["chain_of_custody"])
+        for step in chain:
+            timeline.append({
+                "timestamp": step.get("timestamp", ev["collected_at"]),
+                "event_type": "EVIDENCE_CUSTODY_STEP",
+                "actor": step.get("actor", ev["collected_by"]),
+                "description": f"Evidence {ev['id']} step: {step.get('action')}",
+                "details": {
+                    "evidence_id": ev["id"],
+                    "sha256": step.get("sha256", ev["sha256"]),
+                    "step": step.get("step")
+                }
+            })
+            
+    # 3. Correlated Audit Log records
+    placeholders = ",".join("?" for _ in [case_id] + evidence_ids)
+    cur.execute(f"""
+        SELECT * FROM audit_log 
+        WHERE target IN ({placeholders})
+        ORDER BY timestamp ASC;
+    """, [case_id] + evidence_ids)
+    audit_rows = cur.fetchall()
+    conn.close()
+    
+    for a in audit_rows:
+        timeline.append({
+            "timestamp": a["timestamp"],
+            "event_type": "AUDIT_VERIFIED_ACTION",
+            "actor": a["actor"],
+            "description": f"Action '{a['action']}' on target '{a['target']}' ({a['result']})",
+            "details": {
+                "audit_id": a["id"],
+                "audit_hash": a["current_hash"],
+                "action": a["action"]
+            }
+        })
+        
+    timeline.sort(key=lambda x: x["timestamp"])
+    return timeline
+
+def export_case_report(case_id: str, export_format: str = "markdown") -> Dict[str, Any]:
+    """
+    Exports a cryptographically verified case dossier report.
+    Generates an immutable report file with SHA-256 digest in the evidence vault.
+    """
+    manifest = generate_case_manifest(case_id)
+    if "error" in manifest:
+        return manifest
+        
+    timeline = build_case_timeline(case_id)
+    ensure_vault_dir()
+    
+    now_str = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
+    report_content = f"""# ÆONIX VERITAS // Official Forensic Examination Report
+**Case Identifier:** `{manifest['case_id']}`  
+**Case Title:** {manifest['title']}  
+**Legal Basis:** {manifest['legal_basis']}  
+**Lead Investigator:** {manifest['created_by']}  
+**Report Exported:** {now_str}  
+**Integrity Status:** {'VERIFIED INTACT' if manifest['all_evidence_intact'] else 'INTEGRITY ALERT - TAMPERING DETECTED'}
+
+---
+
+## 1. Executive Summary
+- **Description:** {manifest['description']}
+- **Status:** {manifest['status'].upper()}
+- **Total Forensic Artifacts:** {manifest['total_evidence_items']}
+- **Global Chain-of-Custody Intact:** {manifest['all_evidence_intact']}
+
+---
+
+## 2. Evidence Inventory & Cryptographic Proofs
+"""
+    for idx, item in enumerate(manifest["evidence_items"], 1):
+        ver = item["verification"]
+        report_content += f"""
+### Artifact #{idx}: `{item['evidence_id']}`
+- **SHA-256 Checksum:** `{item['sha256']}`
+- **MIME Type:** `{item['mime_type']}`
+- **Collected At:** {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(item['collected_at']))}
+- **Collected By:** {item['collected_by']}
+- **Vault Verification:** `{ver['status']}` (Match: `{ver['verified']}`)
+"""
+
+    report_content += """
+---
+
+## 3. Chronological Forensic Timeline
+"""
+    for entry in timeline:
+        t_str = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(entry['timestamp']))
+        report_content += f"- **[{t_str}]** `{entry['event_type']}` by **{entry['actor']}**: {entry['description']}\n"
+
+    report_content += """
+---
+*Exported autonomously by ÆONIX PRISM Core Mind. 100% On-Device Provenance.*
+"""
+
+    report_filename = f"report_{case_id}_{int(time.time())}.md"
+    report_path = os.path.join(VAULT_DIR, report_filename)
+    
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(report_content)
+    os.chmod(report_path, 0o444)
+    
+    report_sha256 = compute_sha256(report_path)
+    
+    log_audit_event(
+        actor=manifest['created_by'],
+        action="case_report_exported",
+        target=case_id,
+        result="success",
+        details={
+            "report_path": report_path,
+            "report_sha256": report_sha256,
+            "total_items": manifest['total_evidence_items']
+        }
+    )
+    
+    return {
+        "success": True,
+        "case_id": case_id,
+        "report_file": report_path,
+        "report_sha256": report_sha256,
+        "timeline_events": len(timeline),
+        "all_evidence_intact": manifest['all_evidence_intact'],
+        "content_preview": report_content[:500]
+    }
+
 get_case_manifest = generate_case_manifest
+
 
 if __name__ == "__main__":
     import tempfile
