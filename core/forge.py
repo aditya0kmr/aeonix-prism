@@ -221,6 +221,50 @@ def execute_typed_operation(
     op = TYPED_OPERATIONS[operation_name]
     safe_cwd = _validate_path(cwd)
 
+    # 1. Pre-Gate Argument Sanitization, Option Validation & Protected Tree Checks (Pre-Hold)
+    if not sentinel_request_id and extra_args:
+        for a in extra_args:
+            clean_arg = str(a).strip()
+            if any(char in clean_arg for char in [";", "|", "&", "$", "`", "\n"]):
+                return {
+                    "success": False,
+                    "error": f"ILLEGAL_ARGUMENT: Shell metacharacters are prohibited: {clean_arg}",
+                    "status": "denied"
+                }
+            if operation_name == "file_remove":
+                if clean_arg.startswith("-"):
+                    if clean_arg not in {"-f", "-r", "-rf", "-v"}:
+                        return {
+                            "success": False,
+                            "error": f"ILLEGAL_OPTION: Option '{clean_arg}' is strictly prohibited for file_remove",
+                            "status": "denied"
+                        }
+                else:
+                    resolved_path = os.path.realpath(os.path.abspath(os.path.join(safe_cwd, clean_arg)))
+                    base_name = os.path.basename(resolved_path)
+                    orig_base = os.path.basename(clean_arg)
+                    secrets_dir = os.path.realpath(os.path.expanduser("~/.aeonix/secrets"))
+                    home_dir = os.path.realpath(os.path.expanduser("~"))
+
+                    is_protected = False
+                    if resolved_path in {"/", "/system", "/data/data/com.termux/files/usr", home_dir, "/data/data/com.termux/files/home"}:
+                        is_protected = True
+                    elif resolved_path == secrets_dir or resolved_path.startswith(secrets_dir + "/"):
+                        is_protected = True
+                    elif base_name in {".git", ".ssh"} or orig_base in {".git", ".ssh"} or "/.git/" in resolved_path or "/.ssh/" in resolved_path or resolved_path.endswith("/.git") or resolved_path.endswith("/.ssh"):
+                        is_protected = True
+                    elif resolved_path.endswith(".db") or resolved_path.endswith(".db-wal") or resolved_path.endswith(".db-shm") or base_name in {"aeonix_vault.db", "vault.db"}:
+                        is_protected = True
+                    elif "/aeonix/core" in resolved_path or "/aeonix/data" in resolved_path or base_name in {"models", "bin", "data"}:
+                        is_protected = True
+
+                    if is_protected:
+                        return {
+                            "success": False,
+                            "error": f"PROTECTED_RESOURCE: Removal of critical system artifact '{clean_arg}' is strictly prohibited.",
+                            "status": "denied"
+                        }
+
     # Consequential Gate
     if op["is_consequential"]:
         exact_target = f"{op['binary']} {operation_name} {' '.join(str(a) for a in (extra_args or []))}".strip()
@@ -277,20 +321,52 @@ def execute_typed_operation(
                     "status": "denied"
                 }
             if operation_name == "file_remove":
-                base_name = os.path.basename(clean_arg)
-                if base_name in [".git", ".ssh", "aeonix_vault.db", "vault.db", "models", "bin", "data"]:
-                    if sentinel_request_id:
-                        complete_sentinel_execution(
-                            sentinel_request_id,
-                            success=False,
-                            error_msg=f"Protected resource '{base_name}'",
-                            db_path=target_db
-                        )
-                    return {
-                        "success": False,
-                        "error": f"PROTECTED_RESOURCE: Removal of critical system artifact '{base_name}' is strictly prohibited.",
-                        "status": "denied"
-                    }
+                # 1. Per-operation option validation
+                if clean_arg.startswith("-"):
+                    if clean_arg not in {"-f", "-r", "-rf", "-v"}:
+                        return {
+                            "success": False,
+                            "error": f"ILLEGAL_OPTION: Option '{clean_arg}' is strictly prohibited for file_remove",
+                            "status": "denied"
+                        }
+                else:
+                    # 2. Canonical resolved-path containment & protected tree policy
+                    resolved_path = os.path.realpath(os.path.abspath(os.path.join(safe_cwd, clean_arg)))
+                    base_name = os.path.basename(resolved_path)
+                    orig_base = os.path.basename(clean_arg)
+                    secrets_dir = os.path.realpath(os.path.expanduser("~/.aeonix/secrets"))
+                    home_dir = os.path.realpath(os.path.expanduser("~"))
+
+                    is_protected = False
+                    # System root, home root, or Termux usr prefix
+                    if resolved_path in {"/", "/system", "/data/data/com.termux/files/usr", home_dir, "/data/data/com.termux/files/home"}:
+                        is_protected = True
+                    # Secrets storage containment
+                    elif resolved_path == secrets_dir or resolved_path.startswith(secrets_dir + "/"):
+                        is_protected = True
+                    # Git repositories or SSH internals
+                    elif base_name in {".git", ".ssh"} or orig_base in {".git", ".ssh"} or "/.git/" in resolved_path or "/.ssh/" in resolved_path or resolved_path.endswith("/.git") or resolved_path.endswith("/.ssh"):
+                        is_protected = True
+                    # SQLite databases and WAL/SHM artifacts
+                    elif resolved_path.endswith(".db") or resolved_path.endswith(".db-wal") or resolved_path.endswith(".db-shm") or base_name in {"aeonix_vault.db", "vault.db"}:
+                        is_protected = True
+                    # Critical source & data trees
+                    elif "/aeonix/core" in resolved_path or "/aeonix/data" in resolved_path or base_name in {"models", "bin", "data"}:
+                        is_protected = True
+
+                    if is_protected:
+                        if sentinel_request_id:
+                            complete_sentinel_execution(
+                                sentinel_request_id,
+                                success=False,
+                                error_msg=f"Protected resource '{clean_arg}' (resolved: {resolved_path})",
+                                db_path=target_db
+                            )
+                        return {
+                            "success": False,
+                            "error": f"PROTECTED_RESOURCE: Removal of critical system artifact '{clean_arg}' is strictly prohibited.",
+                            "status": "denied"
+                        }
             arg_list.append(clean_arg)
 
     t0 = time.perf_counter()

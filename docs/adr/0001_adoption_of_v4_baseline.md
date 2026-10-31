@@ -1,0 +1,69 @@
+# Architecture Decision Record (ADR) 0001: Adoption of Reconciled Master Engineering Specification v4.0
+
+* **Status:** Adopted
+* **Date:** 2026-10-31
+* **Deciders:** Sovereign Operator (Aadi) & Core Architecture Agent
+* **Governing Specification:** [`AEONIX_PRISM_Reconciled_Master_Engineering_v4.md`](file:///data/data/com.termux/files/home/gdrive_zip/extracted/AEONIX_PRISM_Reconciled_Master_Engineering_v4.md)
+* **Requirements Seed:** [`AEONIX_PRISM_Requirements_Seed.csv`](file:///data/data/com.termux/files/home/gdrive_zip/extracted/AEONIX_PRISM_Requirements_Seed.csv) (427 requirement seeds across 54 capability owners)
+
+---
+
+## 1. Context and Problem Statement
+
+The project originated across 18 separate design documents and conversational blueprints in Google Drive (`1ARRSEmUAE1lw3ubuBspiPEg35BeBsa-N`). Over time, these documents introduced competing architectural assumptions:
+* Approval flows in early diagrams depicted approvals granted directly via the Fire TV remote, contradicting the sovereign root-of-trust security model.
+* Voice transport was variously specified as Opus, WebRTC, or raw PCM.
+* Process models varied between heavyweight multi-process LangGraph/CrewAI frameworks and bounded async single-process execution.
+* Memory ceilings varied between 80MB, 150MB, 180MB, and 250MB.
+* Nomenclature varied across ancestral names (AURA, KAIROS, OMNIA, NOEMA, AETHERION).
+
+The newly provided `AEONIX_PRISM_Agent_Implementation_Packet_v4.zip` establishes a formal, unified, evidence-based engineering baseline (v4.0).
+
+---
+
+## 2. Decision Register (D01 – D18)
+
+We formally adopt the 18 governing decisions established in Section 2 of Specification v4.0:
+
+1. **D01 (Device Topology):** Strict two-device architecture (POCO M4 Pro 5G as Sovereign Core Mind $\longleftrightarrow$ Fire TV Stick Lite as Living-Room Glass Terminal). No third compute host is required.
+2. **D02 (Evidence Boundary):** Claims require verifiable empirical evidence. Test counts or passing suites do not equate to full requirement satisfaction. Unmeasured hypotheses remain labeled hypotheses.
+3. **D03 (Privacy Modes):** Three formal operating modes: `STRICT_OFFLINE` (WAN blocked), `LOCAL_BASE` (default; local Qwen/Whisper with zero telemetry), and `HYBRID_OPT_IN` (explicit operator-approved external queries).
+4. **D04 (Cost & Quotas):** Zero paid cloud inference required for base operation. Optional cloud adapters operate under strict daily quotas with paid fallback disabled.
+5. **D05 (Approval Authority):** Consequential execution is approved manually and strictly from the authenticated POCO operator interface. The Fire TV terminal may display, dismiss, cancel, or deny (`DENY / CANCEL (SAFE)`), but **cannot approve**.
+6. **D06 (Adaptive Consent / AXIOM):** Trust learning records frequency and patterns to *recommend* scope grants. Past approval frequency **never silently creates permissions**. R4/R5 actions remain per-action manual.
+7. **D07 (Local Models):** Single active local generation slot on POCO (Qwen 2.5 0.5B GGUF via `llama-server`). Default memory policy is burst-unload; residency requires measured headroom. Named agents represent logical execution roles, not separate resident model weights.
+8. **D08 (Voice Transport):** Push-To-Talk (PTT) baseline using **16-bit 16kHz Mono PCM** over WebSocket directly to POCO. No continuous always-on TV microphone listening.
+9. **D09 (Fast Streaming Feedback):** Quick acoustic receipt feedback; never speak a success claim before physical verification, and never stream unverified policy decisions.
+10. **D10 (Native Leanback UI):** Pure native Android Jetpack Leanback UI (Java/Kotlin). **Zero WebViews**. Proposed project memory ceilings: $<80\text{MB}$ active PSS ambient/screensaver, $<180\text{MB}$ peak full-use, APK $<100\text{MB}$.
+11. **D11 (Thin Client Compliance):** Fire TV runs zero heavy inference, zero background network scanning, and maintains **0 KB SQLite** database memory. POCO master secrets never touch the TV.
+12. **D12 (Active Storage Encryption):** Encrypted backup archives do not constitute active memory encryption. Sensitive active vault content and secrets require field-level authenticated AES-256-GCM encryption.
+13. **D13 (Sandboxed Tools & Forge):** Termux UID and PRoot are not secure multi-tenant isolation boundaries. Generated code must never execute in Core under Core credentials. Execution relies on allowlisted, typed tool catalogs (`shell=False`, argument grammar validation, path containment).
+14. **D14 (ASGI Orchestrator):** Single bounded async Python orchestrator on POCO Termux. Bounded thread pool executors for heavy tasks. No Redis or distributed consensus unless proven necessary.
+15. **D15 (Discovery vs. Authentication):** mDNS discovers connection endpoints but provides zero security. Handshakes require cryptographic HMAC-SHA256 bearer tokens. Hardcoded IPs do not define authority.
+16. **D16 (Safety Boundaries):** Legitimate personal assistant and defensive OSINT ambition; zero unauthorized intrusion, covert recording, or private account bypassing.
+17. **D17 (Nomenclature & Register):** 54 capability owners registered in Section 26. Ancestral codenames map into current modules (e.g., NOEMA owns memory, LUMEN owns display context, SPECTRA owns media/IPTV).
+18. **D18 (G0–G12 Gates):** Structured progression through canonical gates:
+    * G0: Audit/Recovery Baseline
+    * G1: Authority Foundation
+    * G2: Durable Core & Active Encrypted Memory
+    * G3: PRISM UI Vertical Slice
+    * G4: VOX Baseline
+    * G5: NOVA Local LLM & Optional Hybrid Gateway
+    * G6: AADYA Context & Personal Memory
+    * G7: Research / OSINT Pipeline
+    * G8: Visual & Forensic Cases
+    * G9: Guardian & LAN Supervision
+    * G10: Forge Sandboxed Workflows
+    * G11: Advanced Capabilities
+    * G12: Release Acceptance
+
+---
+
+## 3. Superseded Legacy Instructions
+
+This ADR explicitly records that the following older document instructions are superseded:
+1. **Fire TV Remote Approval:** Any flow showing remote approval of consequential actions is superseded by D05 (manual POCO operator approval only).
+2. **Opus Audio Compression:** Superseded by D08 (16-bit 16kHz Mono PCM baseline).
+3. **Hardware Memory Budgets:** Older references to 250MB or 150MB TV budgets are superseded by D10 ($<80\text{MB}$ ambient, $<180\text{MB}$ peak).
+4. **Multi-Process Swarms:** LangGraph/CrewAI multi-process designs are superseded by D14 (single async orchestrator with heavy executor thread pools) to stay within Termux process killer budgets.
+5. **Hardware Security Assumptions:** Termux UID PIN challenges are recognized as interim application access control against accidental use, not hardware-backed multi-user sandbox boundaries.

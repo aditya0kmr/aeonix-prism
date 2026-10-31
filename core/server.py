@@ -6,13 +6,14 @@ import json
 import time
 import asyncio
 import base64
-from typing import List, Set
+from typing import List, Set, Tuple, Dict, Any, Optional
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from aeonix.core.db import (
     init_database,
@@ -54,12 +55,16 @@ def get_request_identity(request) -> Tuple[str, str]:
     Derives identity from cryptographically verified bearer token.
     Returns (role: str, device_id: str).
     """
-    auth_header = request.headers.get("Authorization", "")
+    if hasattr(request, "state"):
+        role = getattr(request.state, "auth_role", None)
+        device_id = getattr(request.state, "device_id", None)
+        if role and device_id:
+            return role, device_id
+
+    auth_header = request.headers.get("Authorization", "") or request.headers.get("authorization", "")
     token = ""
     if auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
-    elif "token" in request.query_params:
-        token = request.query_params["token"].strip()
 
     if token:
         payload = verify_token(token)
@@ -84,6 +89,21 @@ async def lifespan(app: Starlette):
     log_audit_event("SYSTEM", "daemon_stop", "aeonix_core", "ok", {})
 
 async def get_status(request):
+    """
+    Public minimal liveness endpoint.
+    Strictly leaks zero usernames, device counts, or resources/RAM.
+    """
+    return JSONResponse({
+        "status": "online",
+        "system": "ÆONIX PRISM Core Mind v2.0",
+        "timestamp": time.time()
+    })
+
+async def get_system_status(request):
+    """
+    Authenticated system telemetry and operational status.
+    Requires ROLE_POCO_CORE.
+    """
     ram = check_ram_guard()
     conn = get_connection()
     cur = conn.cursor()
@@ -366,18 +386,32 @@ async def post_voice_transcribe(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 async def websocket_endpoint(websocket: WebSocket):
-    # Authenticate WebSocket handshake - zero implicit loopback or IP trust
-    token = websocket.query_params.get("token", "")
+    # Strictly reject query parameter tokens to eliminate URL token exposure
+    if "token" in websocket.query_params:
+        await websocket.close(
+            code=4401, 
+            reason="Unauthorized: Tokens in query parameters are strictly forbidden. Use RFC 6455 Authorization header."
+        )
+        return
+
+    auth_header = websocket.headers.get("authorization", "") or websocket.headers.get("Authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+
     if not token:
-        auth_header = websocket.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:].strip()
+        await websocket.close(
+            code=4401, 
+            reason="Unauthorized: Missing Authorization header in WebSocket handshake"
+        )
+        return
 
-    payload = verify_token(token) if token else None
-
+    payload = verify_token(token)
     if not payload:
-        # Strictly reject unauthenticated connections (zero loopback or IP bypass)
-        await websocket.close(code=4401, reason="Unauthorized: Cryptographic bearer token required")
+        await websocket.close(
+            code=4401, 
+            reason="Unauthorized: Invalid, expired, or revoked cryptographic bearer token"
+        )
         return
 
     ws_role = payload.get("role", ROLE_FIRETV_GLASS)
@@ -1138,9 +1172,143 @@ async def post_veritas_export_endpoint(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+PUBLIC_ENDPOINTS = {
+    ("GET", "/api/status"),
+}
+
+FIRETV_ALLOWED_ENDPOINTS = {
+    ("GET", "/api/status"),
+    ("GET", "/api/sentinel/pending"),
+    ("POST", "/api/sentinel/resolve"),
+    ("POST", "/api/intent"),
+    ("POST", "/api/voice/transcribe"),
+    ("GET", "/api/lumen/surface"),
+    ("GET", "/api/briefing"),
+    ("GET", "/api/media/channels"),
+    ("GET", "/api/media/current"),
+    ("POST", "/api/media/play"),
+    ("POST", "/api/media/control"),
+    ("GET", "/api/sanctuary/status"),
+}
+
+AGENT_ALLOWED_ENDPOINTS = {
+    ("GET", "/api/status"),
+    ("POST", "/api/sentinel/create"),
+    ("POST", "/api/agents/dispatch"),
+    ("POST", "/api/memory/remember"),
+    ("GET", "/api/memory/recall"),
+}
+
+class CentralAuthMiddleware(BaseHTTPMiddleware):
+    """
+    Central Authentication and Sovereign RBAC Role Enforcement Middleware.
+    Enforces:
+    - Zero unauthenticated access outside PUBLIC_ENDPOINTS allowlist.
+    - Bearer token authentication via RFC 6750 Authorization header only.
+    - Rejection of expired, forged, or revoked tokens with 401.
+    - Strict role segregation (POCO_CORE, FIRETV_GLASS, AGENT_EXECUTOR) with 403.
+    """
+    async def dispatch(self, request, call_next):
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
+        clean_path = request.url.path.rstrip("/") if request.url.path != "/" else "/"
+        endpoint_key = (request.method, clean_path)
+
+        # 1. Public Allowlist (Minimal liveness only)
+        if endpoint_key in PUBLIC_ENDPOINTS:
+            return await call_next(request)
+
+        # Check disaster recovery maintenance mode lock
+        try:
+            from aeonix.core.backup import is_maintenance_mode
+            if is_maintenance_mode() and not clean_path.startswith("/api/backup"):
+                return JSONResponse(
+                    {
+                        "error": "MAINTENANCE_LOCKED", 
+                        "detail": "Disaster recovery vault restore in progress. Database operations locked."
+                    }, 
+                    status_code=503
+                )
+        except Exception:
+            pass
+
+        # 2. Extract Bearer token strictly from Authorization header
+        auth_header = request.headers.get("Authorization", "") or request.headers.get("authorization", "")
+        token = ""
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+
+        if not token:
+            return JSONResponse(
+                {
+                    "error": "UNAUTHENTICATED: Cryptographic Bearer token required in authorization header", 
+                    "detail": "Missing Authorization header"
+                }, 
+                status_code=401
+            )
+
+        payload = verify_token(token)
+        if not payload:
+            return JSONResponse(
+                {
+                    "error": "UNAUTHENTICATED: Invalid, expired, or revoked cryptographic token in authorization header", 
+                    "detail": "Invalid, expired, or revoked token"
+                }, 
+                status_code=401
+            )
+
+        role = payload.get("role", "UNKNOWN")
+        device_id = payload.get("device_id", "unknown")
+        request.state.auth_role = role
+        request.state.device_id = device_id
+
+        # 3. RBAC Role Matrix Enforcement
+        if role == ROLE_POCO_CORE:
+            return await call_next(request)
+        elif role == ROLE_FIRETV_GLASS:
+            if endpoint_key in FIRETV_ALLOWED_ENDPOINTS:
+                return await call_next(request)
+            return JSONResponse(
+                {
+                    "error": "FORBIDDEN", 
+                    "detail": f"Role '{role}' is not authorized to access {request.method} {clean_path}"
+                }, 
+                status_code=403
+            )
+        elif role == ROLE_AGENT_EXECUTOR:
+            if endpoint_key in AGENT_ALLOWED_ENDPOINTS:
+                return await call_next(request)
+            return JSONResponse(
+                {
+                    "error": "FORBIDDEN", 
+                    "detail": f"Role '{role}' is not authorized to access {request.method} {clean_path}"
+                }, 
+                status_code=403
+            )
+        else:
+            return JSONResponse(
+                {
+                    "error": "FORBIDDEN", 
+                    "detail": f"Unrecognized sovereign role: '{role}'"
+                }, 
+                status_code=403
+            )
+
+middleware = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    ),
+    Middleware(CentralAuthMiddleware),
+]
+
 app = Starlette(
     routes=[
         Route("/api/status", get_status, methods=["GET"]),
+        Route("/api/system/status", get_system_status, methods=["GET"]),
         Route("/api/router/status", get_router_status_endpoint, methods=["GET"]),
         Route("/api/ai/benchmark", post_ai_benchmark, methods=["POST"]),
         Route("/api/panoptes/report", get_panoptes_report_endpoint, methods=["GET"]),
@@ -1206,5 +1374,6 @@ app = Starlette(
         Route("/api/advanced/nexus-room", get_advanced_nexus_room, methods=["GET"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
+    middleware=middleware,
     lifespan=lifespan
 )

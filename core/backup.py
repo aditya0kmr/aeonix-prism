@@ -260,7 +260,7 @@ def create_vault_backup(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-def verify_backup(archive_path: str, recovery_passphrase: Optional[str] = None) -> Dict[str, Any]:
+def verify_backup(archive_path: str, recovery_passphrase: Optional[str] = None, allow_maintenance: bool = False) -> Dict[str, Any]:
     """
     Performs full cryptographic verification of a backup archive:
     1. Authenticated AES-GCM decryption & tag validation (if encrypted).
@@ -363,7 +363,7 @@ def verify_backup(archive_path: str, recovery_passphrase: Optional[str] = None) 
             }
 
         # 5. Full Audit-Chain Verification
-        audit_check = verify_audit_chain(extracted_db)
+        audit_check = verify_audit_chain(extracted_db, allow_maintenance=allow_maintenance)
         if not audit_check["is_valid"]:
             return {
                 "success": False,
@@ -419,7 +419,7 @@ def restore_vault_backup(
     restore_dir = None
     try:
         # Pre-restoration verification
-        verify_res = verify_backup(archive_path, recovery_passphrase=recovery_passphrase)
+        verify_res = verify_backup(archive_path, recovery_passphrase=recovery_passphrase, allow_maintenance=True)
         if not verify_res.get("is_intact") and not force:
             return {
                 "success": False,
@@ -493,7 +493,7 @@ def restore_vault_backup(
         os.replace(temp_restoring, target_db_path)
 
         # Step 3: Post-restore verification check on active target DB
-        post_check = verify_audit_chain(target_db_path)
+        post_check = verify_audit_chain(target_db_path, allow_maintenance=True)
         if not post_check.get("is_valid"):
             # Automatic Safety Rollback
             if safety_dir and os.path.exists(os.path.join(safety_dir, "vault.db.bak")):
@@ -516,7 +516,8 @@ def restore_vault_backup(
                 "total_events_restored": post_check.get("total_events", 0),
                 "latency_ms": dt
             },
-            db_path=target_db_path
+            db_path=target_db_path,
+            allow_maintenance=True
         )
 
         return {

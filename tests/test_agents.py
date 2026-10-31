@@ -14,6 +14,10 @@ Tests all 11 specialized agents and the multi-agent orchestrator:
 - Orchestrator (Multi-agent coordination & stateful pause)
 """
 
+import sys
+import os
+sys.path.insert(0, "/data/data/com.termux/files/home/aeonix")
+sys.path.insert(0, "/data/data/com.termux/files/home")
 import unittest
 from agents.navigator import NavigatorAgent
 from agents.collector import CollectorAgent

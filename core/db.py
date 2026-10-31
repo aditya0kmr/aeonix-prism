@@ -7,7 +7,17 @@ from typing import Optional, Dict, Any, List
 
 DB_PATH = os.path.expanduser("~/aeonix/data/aeonix_vault.db")
 
-def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
+def get_connection(db_path: str = DB_PATH, allow_maintenance: bool = False) -> sqlite3.Connection:
+    if not allow_maintenance:
+        maint = False
+        try:
+            from aeonix.core.backup import is_maintenance_mode
+            maint = is_maintenance_mode()
+        except ImportError:
+            pass
+        if maint:
+            raise sqlite3.OperationalError("DATABASE_LOCKED: System is in disaster recovery maintenance mode")
+
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
@@ -234,12 +244,13 @@ def log_audit_event(
     result: str, 
     details: Dict[str, Any], 
     db_path: str = DB_PATH,
-    conn: Optional[sqlite3.Connection] = None
+    conn: Optional[sqlite3.Connection] = None,
+    allow_maintenance: bool = False
 ) -> str:
     """Appends an event to audit_log with cryptographic SHA-256 hash chaining."""
     should_close = False
     if conn is None:
-        conn = get_connection(db_path)
+        conn = get_connection(db_path, allow_maintenance=allow_maintenance)
         should_close = True
         
     cur = conn.cursor()
@@ -515,17 +526,31 @@ def complete_sentinel_execution(
 ) -> bool:
     """
     Finalizes execution lifecycle: transitions status from 'claimed' to 'completed' or 'failed'.
+    Strictly enforces that starting status must be 'claimed'.
+    Rejects transition from 'pending', 'approved', 'expired', or already finalized states.
     """
-    conn = get_connection(db_path)
+    conn = get_connection(db_path, allow_maintenance=True)
     cur = conn.cursor()
     now = time.time()
     new_status = "completed" if success else "failed"
     try:
         cur.execute("BEGIN IMMEDIATE;")
-        cur.execute("SELECT target, action_type FROM sentinel_requests WHERE id = ?;", (req_id,))
+        cur.execute("SELECT status, target, action_type FROM sentinel_requests WHERE id = ?;", (req_id,))
         row = cur.fetchone()
-        target = row[0] if row else "unknown"
-        action = row[1] if row else "unknown"
+        if not row:
+            conn.rollback()
+            conn.close()
+            return False
+
+        current_status = row["status"] if isinstance(row, sqlite3.Row) else row[0]
+        # Starting status MUST be 'claimed'
+        if current_status != "claimed":
+            conn.rollback()
+            conn.close()
+            return False
+
+        target = row["target"] if isinstance(row, sqlite3.Row) else row[1]
+        action = row["action_type"] if isinstance(row, sqlite3.Row) else row[2]
 
         cur.execute("UPDATE sentinel_requests SET status = ? WHERE id = ?;", (new_status, req_id))
         log_audit_event(
@@ -553,9 +578,9 @@ def consume_sentinel_authorization(
     db_path: str = DB_PATH
 ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
     """
-    Atomically verifies and consumes an approved Sentinel authorization order.
-    Checks target, action, and exact scope parameters.
-    Returns (is_consumed: bool, request_dict: Optional[dict], reason: str).
+    Atomically verifies and consumes (claims) an approved Sentinel authorization order.
+    Transitions status: 'approved' -> 'claimed'.
+    Does NOT fabricate execution completion without actual execution.
     """
     is_claimed, req_dict, reason = claim_sentinel_authorization(
         req_id=req_id,
@@ -565,9 +590,6 @@ def consume_sentinel_authorization(
         db_path=db_path
     )
     if is_claimed:
-        complete_sentinel_execution(req_id, success=True, output_summary="Consumed via sentinel authorization", db_path=db_path)
-        if req_dict:
-            req_dict["status"] = "completed"
         return True, req_dict, "CONSUMED_SUCCESS"
     return False, req_dict, reason
 
@@ -657,12 +679,12 @@ def resolve_sentinel_request(
         conn.close()
         return False, f"TRANSACTION_ERROR: {str(e)}"
 
-def verify_audit_chain(db_path: str = DB_PATH) -> Dict[str, Any]:
+def verify_audit_chain(db_path: str = DB_PATH, allow_maintenance: bool = False) -> Dict[str, Any]:
     """
     Cryptographically verifies the entire audit_log SHA-256 hash chain from genesis to tip.
     Detects any inserted, modified, or deleted records.
     """
-    conn = get_connection(db_path)
+    conn = get_connection(db_path, allow_maintenance=allow_maintenance)
     cur = conn.cursor()
     cur.execute("SELECT id, timestamp, actor, action, target, result, details_json, previous_hash, current_hash FROM audit_log ORDER BY id ASC;")
     rows = cur.fetchall()

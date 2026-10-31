@@ -375,24 +375,30 @@ class TestNegativeSecurityAndAuth(unittest.TestCase):
         self.assertEqual(r.status_code, 403)
 
     def test_12_websocket_unauthenticated_handshake_rejected(self):
-        """Verifies WebSocket endpoint rejects missing or forged tokens and accepts valid tokens."""
+        """Verifies WebSocket endpoint rejects missing, query param, or forged tokens and accepts valid header tokens."""
         client = TestClient(app)
 
-        # Handshake without token -> rejected
-        with self.assertRaises(WebSocketDisconnect):
+        # 1. Handshake without token -> rejected
+        with self.assertRaises(WebSocketDisconnect) as cm:
             with client.websocket_connect("/ws") as ws:
                 pass
+        self.assertEqual(cm.exception.code, 4401)
 
-        # Handshake with forged token -> rejected with code 4401
-        try:
-            with client.websocket_connect("/ws?token=forged.invalid.sig") as ws:
-                pass
-        except WebSocketDisconnect as e:
-            self.assertEqual(e.code, 4401)
-
-        # Handshake with valid Fire TV token -> accepted
+        # 2. Handshake with token in query string -> strictly rejected with 4401 (URL token leakage prevention)
         tv_token = issue_device_token("firetv_stick_lite", ROLE_FIRETV_GLASS)
-        with client.websocket_connect(f"/ws?token={tv_token}") as ws:
+        with self.assertRaises(WebSocketDisconnect) as cm:
+            with client.websocket_connect(f"/ws?token={tv_token}") as ws:
+                pass
+        self.assertEqual(cm.exception.code, 4401)
+
+        # 3. Handshake with forged token in Authorization header -> rejected with code 4401
+        with self.assertRaises(WebSocketDisconnect) as cm:
+            with client.websocket_connect("/ws", headers={"Authorization": "Bearer forged.invalid.token"}) as ws:
+                pass
+        self.assertEqual(cm.exception.code, 4401)
+
+        # 4. Handshake with valid Fire TV token via RFC 6455 Authorization header -> accepted
+        with client.websocket_connect("/ws", headers={"Authorization": f"Bearer {tv_token}"}) as ws:
             msg = ws.receive_json()
             self.assertEqual(msg.get("type"), "layout_update")
 
