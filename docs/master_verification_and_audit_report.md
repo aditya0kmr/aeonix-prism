@@ -1,277 +1,130 @@
-# ÆONIX PRISM — Master Independent Verification & Raw Evidence Audit Report
+# ÆONIX PRISM // Master Verification & Audit Report
 
-> **Project:** ÆONIX PRISM (Sovereign Intelligence & Living-Room OS)  
-> **Target Devices:** POCO M4 Pro 5G (`22031116AI`, Dimensity 810) $\longleftrightarrow$ Amazon Fire TV Stick Lite Gen 1 (`AFTSS`, Fire OS 7 / Android 9)  
-> **Audit Date & Local Time:** October 31, 2026 — 16:38:00 IST (11:08:00 UTC)  
-> **Source Documents Audited:** Google Drive Master Repository (`1ARRSEmUAE1lw3ubuBspiPEg35BeBsa-N`)  
-> **Auditor Status:** Comprehensive Independent Verification & Empirical Telemetry Audit
-
----
-
-## 1. Executive Summary & Acceptance Gate Reconciliation
-
-This audit report provides raw telemetry, cryptographic proofs, and empirical test records addressing all 8 criteria specified in the reviewer acceptance gate:
-
-1. **Full HTTP/WebSocket Authorization:** Zero implicit loopback or IP bypass. All REST endpoints and WebSockets strictly require cryptographically signed HMAC-SHA256 bearer tokens. Handshakes without tokens or with forged tokens are rejected (HTTP 401 / WS 4401).
-2. **Exact Scope & Argument Binding:** Sentinel authorization orders are cryptographically bound to the exact target string, action type, command arguments, and working directory (`cwd`). Any alteration of arguments or directory triggers `SCOPE_MISMATCH` or `TARGET_MISMATCH` rejection.
-3. **Protected Resource Defense:** Even if an operator or compromised agent issues an approval for critical system artifacts (`.git`, `.ssh`, `aeonix_vault.db`, `models`, `bin`, `data`), Forge intercepts the execution, denies the operation with `PROTECTED_RESOURCE`, and marks the Sentinel order status as `failed`.
-4. **Execution Lifecycle State Machine:** Strict transitions (`pending` $\rightarrow$ `approved` $\rightarrow$ `claimed` $\rightarrow$ `completed` / `failed`). Once claimed or completed, replay attempts are atomically rejected with `ALREADY_CONSUMED`.
-5. **Maintenance Mode & Automatic Rollback:** Disaster recovery restore locks the database in system-wide maintenance mode (`is_maintenance_mode() == True`), creates an emergency safety copy (`vault.db.bak`), and automatically rolls back if post-restore audit chain verification fails.
-6. **Reconciled Verbose Test Inventory:** Exactly 115 tests across 13 test files discovered and executed with 100% pass rate in 31.216 seconds. Full file-by-file counts and names reconcile with zero discrepancies.
-7. **Source-Commit-to-APK Build Record:** Complete provenance linking git commit `130b2e2` on `feature/cleanyourtv-hybrid-base` to APK SHA-256 `bf57f2ec...` installed live on Fire TV Stick Lite via ADB.
-8. **Honest Capability Matrix:** Three-tier distinction separating Demonstrated (empirical verification), Partial (core engine implemented, full ecosystem roadmap), and Unimplemented (theoretical/future).
+**Date:** October 31, 2026  
+**Governing Baseline:** Specification v4.0 ([ADR 0001](file:///data/data/com.termux/files/home/aeonix/docs/adr/0001_adoption_of_v4_baseline.md))  
+**Topology:** Strict Two-Device Architecture
+* **Sovereign Core Mind:** POCO M4 Pro 5G (`22031116AI`, IP: `10.116.23.168`)
+* **Glass Terminal:** Fire TV Stick Lite (`AFTSS`, product: `sheldon`, IP: `10.116.23.179`)
+* **Third Compute Host:** None (0 external machines)
 
 ---
 
-## 2. Git Provenance & Commit Build Telemetry
+## 1. Verified Repository Revisions & Full 40-Character Commit SHAs
 
-### 2.1 Backend Repository (`aditya0kmr/aeonix-prism`)
-* **Repository URL:** `https://github.com/aditya0kmr/aeonix-prism`
-* **Branch:** `main`
-* **Base Commit:** [`98af8a2fa6e280ff20d9deedc24e4dc58c72d099`](https://github.com/aditya0kmr/aeonix-prism/commit/98af8a2fa6e280ff20d9deedc24e4dc58c72d099)
-* **Latest Applied Updates (Working Tree):**
-  * `core/server.py`: Eliminated loopback (`127.0.0.1`) and fixed-IP trust. Enforced token authentication on WebSocket and REST endpoints with 401 Unauthorized / 403 Forbidden returns.
-  * `core/db.py`: Implemented `claim_sentinel_authorization` and `complete_sentinel_execution` enforcing exact scope comparison (`cwd`, `extra_args`) and state lifecycle (`pending` $\rightarrow$ `approved` $\rightarrow$ `claimed` $\rightarrow$ `completed`/`failed`).
-  * `core/forge.py`: Integrated `claim_sentinel_authorization` and `complete_sentinel_execution`; added protected resource rejection even under valid approvals; added `tempfile.gettempdir()` to safe paths.
-  * `core/backup.py`: Added `set_maintenance_mode`, `is_maintenance_mode`, safety rollback snapshot (`vault.db.bak`), and automatic rollback on verification failure.
-  * `tests/test_negative_security_and_auth.py`: Expanded from 7 to 13 comprehensive negative security tests.
-
-### 2.2 Launcher Repository (`aditya0kmr/cleanyourtv`)
-* **Repository URL:** `https://github.com/aditya0kmr/cleanyourtv`
-* **Branch:** `feature/cleanyourtv-hybrid-base`
-* **Committed Head:** [`130b2e2d93e50e8fa79261a9bc746e5ca939f40e`](https://github.com/aditya0kmr/cleanyourtv/commit/130b2e2d93e50e8fa79261a9bc746e5ca939f40e)
-* **Commit Message:** `feat(auth): Bind Fire TV WebSocket client to cryptographic bearer token`
-* **Committed Diff:** Bound `AeonixWebSocketClient.java` to issue bearer token in RFC 6455 HTTP handshake (`GET /ws?token=...` and `Authorization: Bearer ...`).
-
-### 2.3 Source-Commit-to-APK Build Provenance
-| Property | Build Record |
-| :--- | :--- |
-| **Source Commit** | `130b2e2d93e50e8fa79261a9bc746e5ca939f40e` (`feature/cleanyourtv-hybrid-base`) |
-| **Build Machine** | POCO M4 Pro 5G (`aarch64-linux-android`, Termux) |
-| **Build Toolchain** | Gradle 8.2, AAPT2 (`/data/data/com.termux/files/usr/bin/aapt2`), OpenJDK 17.0.11 |
-| **Build Command** | `./gradlew assembleDebug` |
-| **Build Duration** | 51 seconds (33 actionable tasks: 4 executed, 29 up-to-date) |
-| **Generated Binary** | `app/build/outputs/apk/debug/app-debug.apk` |
-| **Binary SHA-256** | `bf57f2ec9a79c4f58bbcecb1fbc6ae728ac0edc3d2f8872dfdad8d8aaae57c23` |
-| **ADB Install Command**| `adb -s 10.116.23.179:5555 install -r app-debug.apk` $\rightarrow$ `Success` |
-| **Fire TV Installed Path** | `/data/app/com.aether.launcher-WE9OERwvxx7U-zR8RVKzZg==/base.apk` |
-| **Fire TV SHA-256** | `bf57f2ec9a79c4f58bbcecb1fbc6ae728ac0edc3d2f8872dfdad8d8aaae57c23` (**Exact Match**) |
+| Repository | Branch | Full 40-Character Git Commit SHA | Scope of Changes |
+|---|---|---|---|
+| [`aditya0kmr/aeonix-prism`](https://github.com/aditya0kmr/aeonix-prism) | `main` | `5590a01ef21d612b812d9ff8daeccbcb4493ff8f` (Head)<br>`b24d8cd0f3cab5207f477c37bd5cf799fc01a256` (Core) | POCO bearer bypass elimination, displayed action digest binding, overlapping restore lock & active writer coordination, narrow allowlist containment, complete claim finalization, fail-closed atomic lockout, sovereign TLS engine, 4 focused negative test suites. |
+| [`aditya0kmr/cleanyourtv`](https://github.com/aditya0kmr/cleanyourtv) | `feature/cleanyourtv-hybrid-base` | `ae1ccbe8b0ade9cdc7908ab86fae59dde415ccea` | Pinned `SSLSocketFactory` with X.509 SHA-256 fingerprint validation, secure token loading, zero hardcoded credentials, Leanback UI. |
 
 ---
 
-## 3. Reconciled Test Inventory & Execution Telemetry
+## 2. Status of Canonical Gates
 
-### 3.1 Suite Summary
+> [!IMPORTANT]
+> In accordance with governing engineering directives:
+> * **Gate G0 (Audit & Recovery Baseline):** **PARTIAL** (Disaster recovery verified, active baseline cataloged, multi-device release validation in progress).
+> * **Gate G1 (Authority Foundation):** **OPEN** (Authority foundation hardened; production active-vault encryption migration is formally deferred until full G1 acceptance).
+> * **Whole-Project Completion:** **NOT CLAIMED**. Work proceeds systematically gate-by-gate.
+
+---
+
+## 3. Systematic Closure of Findings 1 through 7
+
+### Finding 1: POCO Bearer-Token Approval Bypass Around Local Console
+* **Vulnerability:** `POST /api/sentinel/resolve` previously accepted the `ROLE_POCO_CORE` bearer token and approved consequential actions without physical operator presence or credential confirmation.
+* **Resolution:**
+  1. Updated [`core/db.py`](file:///data/data/com.termux/files/home/aeonix/core/db.py): `resolve_sentinel_request` now strictly mandates `passphrase_verified == True` for approval. Without it, the operation fails with `OPERATOR_PASSPHRASE_REQUIRED`.
+  2. Updated [`core/server.py`](file:///data/data/com.termux/files/home/aeonix/core/server.py): `resolve_sentinel` extracts `operator_passphrase` from the payload/header and validates it against `verify_operator_secret()`. If missing or invalid, it returns `403 Forbidden`.
+  3. Denials and cancellations (`approved == False`) remain permitted without credentials so the operator or Fire TV can immediately halt actions safely.
+* **Verification Suite:** [`tests/test_poco_bearer_bypass_and_digest.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_poco_bearer_bypass_and_digest.py) (`test_01`, `test_04`, `test_05`).
+
+---
+
+### Finding 2: Displayed-Digest-to-Approved-Record Binding
+* **Vulnerability:** Sentinel review cards in the console displayed parameters and digests, but the exact digest was not cryptographically bound to the database row at review and claim time, risking parameter substitution.
+* **Resolution:**
+  1. Database Migration: Schema updated to add `action_digest`, `claimed_by`, `claimed_at`, `completed_at`, `output_summary`, and `error_msg` columns.
+  2. Deterministic Hash: `compute_action_digest()` derives `SHA-256(request_id|agent|action_type|target|scope_canonical)`.
+  3. Queueing: Stored in `sentinel_requests.action_digest`.
+  4. Resolution Verification: `resolve_sentinel_request()` validates the displayed digest against the stored parameters. Any tampering raises `DATABASE_TAMPERING_DETECTED` or `DIGEST_MISMATCH`.
+  5. Claim Verification: `claim_sentinel_authorization()` re-evaluates the digest immediately before execution and enforces strict matching.
+* **Verification Suite:** [`tests/test_poco_bearer_bypass_and_digest.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_poco_bearer_bypass_and_digest.py) (`test_02`, `test_03`).
+
+---
+
+### Finding 3: Active-Writer and Overlapping-Restore Maintenance Coordination
+* **Vulnerability:** Concurrent restore requests could stomp on target database files; database writers could write to SQLite while files were being copied or replaced during disaster recovery.
+* **Resolution:**
+  1. Multi-Layer Mutual Exclusion: [`core/backup.py`](file:///data/data/com.termux/files/home/aeonix/core/backup.py) implements both `threading.Lock()` and non-blocking file-level locking via `fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)` on `<target_db_path>.restore_lock`. Concurrent restore attempts immediately return `OVERLAPPING_RESTORE_BLOCKED`.
+  2. System-Wide Maintenance Lock: `set_maintenance_mode(True)` causes all `get_connection()` and `log_audit_event()` calls to raise `sqlite3.OperationalError("DATABASE_LOCKED: System is in disaster recovery maintenance mode")`.
+  3. SQLite Engine Flush: Before atomic file replacement (`os.replace`), an exclusive SQLite connection executes `PRAGMA locking_mode = EXCLUSIVE; PRAGMA wal_checkpoint(TRUNCATE); BEGIN EXCLUSIVE;` to flush active write transactions.
+* **Verification Suite:** [`tests/test_restore_coordination_and_writer_lock.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_restore_coordination_and_writer_lock.py) (`test_01`, `test_02`, `test_03`).
+
+---
+
+### Finding 4: Narrow Allowlisted Filesystem Targets & Complete Claim Finalization
+* **Vulnerability:** Blacklist-only checking permitted arbitrary filesystem deletion outside protected directories; claimed requests that failed parameter checks or timed out did not transition cleanly in the database.
+* **Resolution:**
+  1. Narrow Positive Allowlist: [`core/forge.py`](file:///data/data/com.termux/files/home/aeonix/core/forge.py) defines `NARROW_FS_ALLOWLIST = [tempdir, /tmp, workspace, scratch, antigravity-cli/brain]`. Filesystem mutations targeting outside this list are rejected with `TARGET_OUTSIDE_ALLOWLIST`.
+  2. Protected Resource Defense: Critical roots (`.git`, `.ssh`, `.aeonix/secrets`, `.db`, `core/`, `models/`, `bin/`) remain strictly forbidden.
+  3. Complete Claim Finalization: Every execution path (success, error, timeout, option violation, allowlist violation) calls `complete_sentinel_execution()`, atomically recording `completed_at`, `output_summary`, and `error_msg`.
+* **Verification Suite:** [`tests/test_narrow_fs_allowlist.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_narrow_fs_allowlist.py) (`test_01`, `test_02`, `test_03`, `test_04`).
+
+---
+
+### Finding 5: Encrypted Transport for Device Credentials
+* **Vulnerability:** Device credentials and WebSocket frames flowed over unencrypted plain TCP.
+* **Resolution:**
+  1. Sovereign TLS Engine: [`core/tls_cert.py`](file:///data/data/com.termux/files/home/aeonix/core/tls_cert.py) generates self-signed 2048-bit RSA X.509 cert and key with SANs (`10.116.23.168`, `localhost`, `aeonix-core.local`).
+  2. Certificate Pinning: Computed SHA-256 fingerprint: `91D9A7F1571157C521C10D5772E46960A4FC9C94ED141D278B3B2F5F92294234`.
+  3. Android Client: [`AeonixWebSocketClient.java`](file:///data/data/com.termux/files/home/aether-launcher/app/src/main/java/com/gathin/tvhome/net/AeonixWebSocketClient.java) loads `cert_pin.json` via private storage and creates `SSLSocketFactory` with a custom `X509TrustManager` pinning the fingerprint.
+  4. Live Provisioning & Handshake: APK built and deployed to Fire TV via ADB; `cert_pin.json` provisioned via `run-as com.aether.launcher`. Fire TV established live TLS WebSocket connection to POCO:
+     ```text
+     10-31 18:46:31.904 30704 30736 I AeonixWS: Initiating Sovereign TLS Handshake with certificate pinning
+     10-31 18:46:32.136 30704 30704 I AeonixLauncher: Connected to Core Mind (POCO)!
+     ```
+* **Live Screen Capture:**
+  ![Fire TV Live Screen with TLS Connection](/data/data/com.termux/files/home/.gemini/antigravity-cli/brain/45968d30-37eb-44cc-9e37-768e91683014/screen_tls_live.png)
+
+---
+
+### Finding 6: Fail-Closed, Atomic Lockout/Reset Behavior
+* **Vulnerability:** `is_operator_locked()` previously had `except Exception: return False, 0.0, 0`, which unlocked the console if the lockout state file was corrupted or malformed. Writes were non-atomic.
+* **Resolution:**
+  1. Fail-Closed Mandate: [`core/operator_console.py`](file:///data/data/com.termux/files/home/aeonix/core/operator_console.py) enforces that if `operator_lockout.json` is corrupted, truncated, or unreadable, `is_operator_locked()` immediately returns `(True, 300.0, 999)`, locking out authentication.
+  2. Atomic Write Primitive: `_atomic_write_json()` writes to a process-unique temporary file, calls `flush()` and `os.fsync()`, sets mode `0600`, and atomically replaces the file with `os.replace()`.
+  3. Deliberate Local Reset: `reset_operator_credentials(confirm=True)` requires explicit confirmation, securely removes PIN and lockout files, revokes all active operator session tokens in the database, and audits the event.
+* **Verification Suite:** [`tests/test_operator_lockout_failclosed.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_operator_lockout_failclosed.py) (`test_01`, `test_02`, `test_03`, `test_04`).
+
+---
+
+### Finding 7: Correct Full Backend SHA and Portable Baseline ADR
+* **Vulnerability:** Historical reports referenced shortened commit SHAs and absolute non-portable Google Drive paths.
+* **Resolution:**
+  1. Portable Baseline Storage: Incorporates `docs/baseline/` inside the repository with verified cryptographic hashes.
+  2. ADR 0001 Updated: [`docs/adr/0001_adoption_of_v4_baseline.md`](file:///data/data/com.termux/files/home/aeonix/docs/adr/0001_adoption_of_v4_baseline.md) updated with portable relative links, SHA-256 document manifest, explicit gate declarations (G0 PARTIAL, G1 OPEN), and full 40-character commit SHAs.
+
+---
+
+## 4. Test Suite Execution Telemetry
+
+Full discovery run executed across the entire repository test suite:
+
 ```text
-Command: PYTHONPATH="/data/data/com.termux/files/home:/data/data/com.termux/files/home/aeonix" python3 -m unittest discover -v -s aeonix/tests
+PYTHONPATH="/data/data/com.termux/files/home:/data/data/com.termux/files/home/aeonix" python3 -m unittest discover tests
 ----------------------------------------------------------------------
-Ran 115 tests in 31.216s
+Ran 141 tests in 48.554s
 
 OK
 ```
 
-### 3.2 Exact Arithmetic Reconciliation (Discovered Tests by Module)
-| Test Module File | Count | Focus Area |
-| :--- | :---: | :--- |
-| [`test_agents.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_agents.py) | **11** | Autonomous specialized agent roles (Orchestrator, Skeptic, Builder, etc.) |
-| [`test_hybrid_router_and_ai.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_hybrid_router_and_ai.py) | **6** | Fast-Path routing (<0.05ms), llama-server GGUF inference, RAM guard recovery |
-| [`test_master_system.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_master_system.py) | **16** | Blackbox flight recorder, Chronos, Lumen Living Surface, signal detection |
-| [`test_negative_security_and_auth.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_negative_security_and_auth.py) | **13** | Negative authorization paths, scope mismatch, lifecycle, REST/WS auth, rollback |
-| [`test_phase3.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_phase3.py) | **5** | Living surface cards, layout updates, weather fast-path dispatch |
-| [`test_phase4.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_phase4.py) | **3** | Spectra IPTV channel catalog, Sanctuary lockdown cycle |
-| [`test_phase4_panoptes_guardian.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_phase4_panoptes_guardian.py) | **6** | LAN perimeter inventory, passive DNS, HTTP headers, entity graph |
-| [`test_phase5.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_phase5.py) | **5** | Forge developer engine, typed operations catalog, command drafting |
-| [`test_phase5_veritas_forge.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_phase5_veritas_forge.py) | **7** | Veritas evidence vault, SHA-256 chain of custody, case manifests |
-| [`test_phase6.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_phase6.py) | **5** | Sovereign mesh, Morph guardrails, Council deliberation session |
-| [`test_stage1_security.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_stage1_security.py) | **17** | Cryptographic order signing, nonces, POCO-only authority, kill-switch |
-| [`test_stage2_correctness.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_stage2_correctness.py) | **14** | Audit chain verification, thread pool safety, concurrent pipeline |
-| [`test_stage3_disaster_recovery.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_stage3_disaster_recovery.py) | **7** | AES-256-GCM encrypted backup, manifest verification, zip bomb defense |
-| **TOTAL** | **115** | **11 + 6 + 16 + 13 + 5 + 3 + 6 + 5 + 7 + 5 + 17 + 14 + 7 = 115 (Reconciled)** |
-
----
-
-## 4. Rigorous Negative Security & Authorization Evidence
-
-The negative test suite [`tests/test_negative_security_and_auth.py`](file:///data/data/com.termux/files/home/aeonix/tests/test_negative_security_and_auth.py) exercises all critical boundary and rejection paths:
-
-### 4.1 REST & WebSocket Authorization Rejections (Zero Trust)
-* **Unauthenticated REST (`test_11`):** `POST /api/sentinel/resolve` without `Authorization` header returns `HTTP 401 Unauthorized` with `{"error": "Missing or invalid authorization header"}`.
-* **Forged Bearer Token (`test_11`):** `POST /api/sentinel/resolve` with tampered HMAC signature returns `HTTP 401 Unauthorized`.
-* **Fire TV Glass Role Violation (`test_11`):** `POST /api/sentinel/resolve` (with `approved=True`) presenting a valid Fire TV token (`ROLE_FIRETV_GLASS`) returns `HTTP 403 Forbidden` with `{"error": "POCO_AUTHORITY_REQUIRED: Approval of consequential actions is restricted strictly to POCO Core Mind"}`.
-* **Forge Execution Role Violation (`test_11`):** `POST /api/forge/execute` presenting `ROLE_FIRETV_GLASS` returns `HTTP 403 Forbidden`.
-* **Sanctuary State Role Violation (`test_11`):** `POST /api/sanctuary/activate` presenting `ROLE_FIRETV_GLASS` returns `HTTP 403 Forbidden`.
-* **WebSocket Token Handshake (`test_12`):**
-  * Connection to `/ws` without token is immediately rejected and closed by server (`WebSocketDisconnect`).
-  * Connection to `/ws?token=forged.invalid.sig` is closed with strict RFC code `4401` (`Unauthorized: Valid cryptographic token required`).
-  * Connection to `/ws?token=<valid_tv_token>` succeeds, establishes paired session, and delivers `layout_update` frame.
-
-### 4.2 Exact Scope & Argument Tampering Defense (`test_08`)
-* Sentinel requests are enqueued with strict scope parameters: `target = "file_remove /tmp/safe/temp_a.txt"`, `scope = {"cwd": "/tmp/safe", "extra_args": ["temp_a.txt"]}`.
-* Even with valid POCO approval, if an execution order attempts to alter `extra_args` (e.g. to `["temp_b.txt"]`), `claim_sentinel_authorization` detects the alteration and aborts with `SCOPE_MISMATCH`.
-* If an execution order alters the working directory (`cwd`), `claim_sentinel_authorization` aborts with `SCOPE_MISMATCH`.
-
-### 4.3 Protected Resource Removal Rejection Under Valid Approval (`test_09`)
-* If an attacker or rogue workflow obtains a valid POCO approval order targeting `.git`, `.ssh`, `aeonix_vault.db`, `models`, `bin`, or `data`:
-  * Forge inspects the target path and immediately halts before execution.
-  * Returns `{"success": False, "status": "denied", "error": "PROTECTED_RESOURCE: Removal of critical system artifact '.git' is strictly prohibited."}`.
-  * Calls `complete_sentinel_execution` marking the Sentinel order status as `failed` with the safety error logged to the cryptographic audit chain.
-
-### 4.4 Execution Lifecycle State Machine (`test_10`)
-* State progression:
-  1. `queue_sentinel_request` $\rightarrow$ `status: pending`
-  2. `resolve_sentinel_request` (POCO) $\rightarrow$ `status: approved`
-  3. `claim_sentinel_authorization` $\rightarrow$ `status: claimed` (atomic single-use claim)
-  4. Subsequent claim attempt $\rightarrow$ Rejection `ALREADY_CONSUMED: Sentinel authorization has already been claimed`
-  5. `complete_sentinel_execution` $\rightarrow$ `status: completed`
-  6. Subsequent claim attempt $\rightarrow$ Rejection `ALREADY_CONSUMED: Sentinel authorization has already been completed`
-
-### 4.5 Maintenance Mode & Automatic Safety Rollback (`test_13`)
-* Pre-restore: System is normal (`is_maintenance_mode() == False`).
-* During restore: System locks in maintenance mode (`is_maintenance_mode() == True`), halting non-recovery database queries.
-* Pre-replacement snapshot: A safe copy of the active database is stored in `target_vault.db.safety_rollback_<ts>/vault.db.bak`.
-* Post-restore validation: If the extracted database fails `verify_audit_chain` (simulated corrupt archive with tampered SHA-256 block), `restore_vault_backup`:
-  * Detects invalid cryptographic chain.
-  * Automatically rolls back `vault.db.bak` to the target location.
-  * Returns `{"success": False, "status": "RESTORE_FAILED_ROLLED_BACK", "error": "Post-restoration verification failed; target DB was rolled back automatically."}`.
-  * Releases maintenance mode (`is_maintenance_mode() == False`).
-  * Leaves the original database completely intact and cryptographically valid (`verify_audit_chain()["is_valid"] == True`).
-
----
-
-## 5. Physical Hardware & Memory Profile Telemetry
-
-### 5.1 POCO M4 Pro 5G (Core Mind)
-* **Model:** Xiaomi POCO M4 Pro 5G (`22031116AI` / `evergo_p_in`)
-* **OS:** Android 13 (HyperOS, SDK 33)
-* **SoC:** MediaTek Dimensity 810 (2x Cortex-A76 @ 2.4GHz + 6x Cortex-A55 @ 2.0GHz)
-* **Active Termux Processes:** 10 processes (well within the Android 32 phantom process killer ceiling)
-* **Available RAM:** **2,949.1 MB free** (Safety Margin: >3.7x above 781.2 MB threshold)
-* **Active Daemon:** Uvicorn Starlette server on `0.0.0.0:8080`, llama-server on `127.0.0.1:8081`
-
-### 5.2 Fire TV Stick Lite Gen 1 (Glass Terminal)
-* **Model:** Amazon Fire TV Stick Lite (`AFTSS`, `sheldon`)
-* **OS:** Fire OS 7.7.1.7 (Android 9, SDK 28, Build `PS7717.5746N`)
-* **SoC:** MediaTek MT8695D (Quad-core ARM Cortex-A53 @ 1.7GHz)
-* **Installed Package:** `com.aether.launcher` (v2.0-hybrid, Build `130b2e2`)
-* **Installed APK SHA-256:** `bf57f2ec9a79c4f58bbcecb1fbc6ae728ac0edc3d2f8872dfdad8d8aaae57c23`
-* **WebSocket Connection Status:** Authenticated & connected (`connected_glass_clients: 1`)
-
-### 5.3 Live Fire TV Memory Profile (`dumpsys meminfo com.aether.launcher`)
-Measured live on Fire TV Stick Lite at uptime 31,790,660:
-```text
-** MEMINFO in pid 22975 [com.aether.launcher] **
-                   Pss  Private  Private  SwapPss     Heap     Heap     Heap
-                 Total    Dirty    Clean    Dirty     Size    Alloc     Free
-                ------   ------   ------   ------   ------   ------   ------
-  Native Heap    17762    17364      116       51    26112    17024     9087
-  Dalvik Heap     3428     3280      120       37     4349     2175     2174
- Dalvik Other     1244     1240        4        0                           
-        Stack       64       64        0        0                           
-       Ashmem        5        0        0        0                           
-    Other dev       60        4       56        0                           
-     .so mmap     7211      172     3308        9                           
-    .apk mmap     5439     3780      292        0                           
-    .ttf mmap      256        0      156        0                           
-    .dex mmap     5456      620     2572        0                           
-    .oat mmap      243        0       60        0                           
-    .art mmap     4967     4416       56      344                           
-   Other mmap      195       24       60        0                           
-    GL mtrack    23841    23841        0        0                           
-      Unknown      713      664       16        8                           
-        TOTAL    71333    55469     6816      449    30461    19199    11261
-
- App Summary
-                       Pss(KB)
-                        ------
-           Java Heap:     7752
-         Native Heap:    17364
-                Code:    10960
-               Stack:       64
-            Graphics:    23841
-       Private Other:     2304
-              System:     9048
- 
-               TOTAL:    71333       TOTAL SWAP PSS:      449
-
- Objects
-               Views:      125         ViewRootImpl:        2
-         AppContexts:        5           Activities:        2
-            WebViews:        0
- 
- SQL
-         MEMORY_USED:        0
-  PAGECACHE_OVERFLOW:        0          MALLOC_SIZE:        0
-```
-* **Active Total PSS:** **71.3 MB** (Strictly below the $<180\text{MB}$ peak budget and $<80\text{MB}$ ambient target).
-* **Active WebViews:** **0** (Pure native Leanback UI; zero Chromium RAM consumption).
-* **Active SQLite on TV:** **0 KB** (Strict Thin Client compliance; all database state is sovereign on POCO).
-
----
-
-## 6. Local Offline AI & Speech Engine Benchmarks
-
-### 6.1 NOVA Local LLM Engine (`llama-server`)
-* **Model:** Qwen 2.5 0.5B Instruct (`qwen2.5-0.5b-instruct-q4_k_m.gguf`)
-* **Model SHA-256:** `74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db`
-* **RAM Guard Measurement:** Free RAM before: `3,365.7 MB` $\rightarrow$ Free RAM after: `3,360.8 MB` (Unload delta: `-4.9 MB`).
-* **Generation Rate:** **10.69 tokens/second** on Dimensity 810 (sub-600ms startup latency).
-
-### 6.2 VOX Offline Speech Recognition (`whisper-cli`)
-* **Binary:** `bin/whisper-cli` (SHA-256: `9182c11a3e1f6e4b...`)
-* **Model:** `models/ggml-tiny.en.bin` (SHA-256: `921e4cf8686f...`)
-* **Measured Runtime:** **2.438 seconds** for 11.0s audio sample (`samples/jfk.wav`).
-* **Cloud Calls:** **0** (100% ARM NEON dotprod offline execution).
-* **Multi-lingual Capability Note:** Demonstrated execution currently validates English transcription with the tiny model; Hindi/Hinglish speech ingestion requires downloading multilingual `ggml-tiny.bin` (or `base`), which is cataloged but not activated by default to preserve flash storage.
-
----
-
-## 7. Honest Capability Matrix (Demonstrated vs Partial vs Unimplemented)
-
-To maintain absolute documentation integrity and avoid claiming unbuilt theoretical capabilities, the system's 60+ conceptual modules from the Drive documents are strictly categorized into three tiers:
-
-```
-+----------------------------------------------------------------------------------------------------+
-|                                    ÆONIX PRISM CAPABILITY STATUS                                   |
-+----------------------------------------------------------------------------------------------------+
-|  [DEMONSTRATED] (100% Functional & Verified via Live Tests & Hardware Telemetry)                   |
-|  - Bi-directional POCO-to-FireTV WebSocket RPC with HMAC-SHA256 Bearer Token Handshake             |
-|  - Fast-Path Tier 0 Intent Classifier (<0.05ms routing, zero LLM overhead)                         |
-|  - Local Offline LLM Inference (Qwen 2.5 0.5B GGUF with RAM Guard & Sub-600ms Startup)             |
-|  - Local Offline Speech Recognition (Whisper Tiny NEON, PCM Audio Streaming)                       |
-|  - Native Android Leanback Glass UI (Zero WebViews, 71.3MB Active PSS, Jetpack Leanback)          |
-|  - Cryptographic Audit Trail (SHA-256 Hash Chaining, Genesis Block Anchoring, Tamper Detection)     |
-|  - Consequential Sentinel Gate (Exact Argument/CWD Binding, POCO-Only Authority, 4-Stage State)   |
-|  - Protected Resource Defense (.git, vault.db, models, bin deletion halted even under approval)   |
-|  - Disaster Recovery Engine (AES-256-GCM Backups, PBKDF2 Key Derivation, Auto-Rollback on Corrupt) |
-|  - Privacy Sanctuary Lockdown (Persistent Mutex, Audio Streaming Blocker, Forge Execution Halt)    |
-+----------------------------------------------------------------------------------------------------+
-|  [PARTIAL] (Core Engine Implemented & Unit Tested, Ecosystem/Hardware Integration in Progress)    |
-|  - Autonomous Multi-Agent Deliberation (Council, AADYA, Skeptic run pipelines, not full swarm)     |
-|  - LAN Perimeter Defense (Panoptes & Guardian do TCP socket probes; iptables rules require root)   |
-|  - Veritas Forensic Vault (SHA-256 manifest hashing implemented; file carving not integrated)      |
-|  - Multi-Lingual STT (English verified; Hindi/Hinglish requires multi-language whisper model)      |
-|  - Visual Intel Pipeline (VISIA frame capture schema built; on-device VLM held to conserve RAM)    |
-+----------------------------------------------------------------------------------------------------+
-|  [UNIMPLEMENTED / ROADMAP] (Document Concepts Reserved for Future Phases)                         |
-|  - Distributed Multi-Node Raft Consensus (Architected for >= 3 nodes; dual-device active now)     |
-|  - Autonomous Self-Compilation into Linux Kernel Binaries (Morph proposes diffs; no kernel build)  |
-|  - Cellular Radio Hardware Bypass (Operates strictly within Android/Termux user-space sandbox)     |
-+----------------------------------------------------------------------------------------------------+
-```
-
----
-
-## 8. Master Specification Reconciliation
-
-1. **Approval Authority Specification:**  
-   The preliminary blueprint diagram showing a user clicking "Approve" on the Fire TV remote has been explicitly superseded. In the production implementation, the Fire TV terminal is authorized **strictly to DENY / CANCEL (SAFE)**. Consequential approvals require cryptographic signing on the **POCO Core Mind** (Root of Trust).
-2. **Voice Audio Transport:**  
-   The voice streaming interface uses **raw 16-bit 16kHz Mono PCM** over WebSocket directly to POCO Core, eliminating client-side Opus compression overhead and buffer latencies on the Fire TV MT8695D SoC.
-3. **Agent Orchestration Framework:**  
-   Coordinated via an async event loop with heavy executor thread pools in Python, superseding heavyweight LangGraph processes to stay strictly below Android's 32 phantom process limit.
-4. **Versioned Performance Budgets:**  
-   * Baseline (Screensaver / Ambient HUD): $< 80\text{MB}$ active PSS.
-   * Peak (Full Leanback Living Surface / Media Browsing): $< 180\text{MB}$ total PSS.
-   * Observed live value: **71.3 MB** total PSS with full Leanback UI; **68.2 MB** ambient.
-5. **Database Storage & Vault Protection:**  
-   Active database runs standard SQLite WAL with PRAGMA integrity checks for maximum local read/write speed on Dimensity 810; disaster recovery snapshots are encrypted with **AES-256-GCM** using PBKDF2 key derivation.
+### Breakdown of Test Suites
+* **`tests.test_poco_bearer_bypass_and_digest`:** 6 tests, 0 failures, 0 errors.
+* **`tests.test_restore_coordination_and_writer_lock`:** 3 tests, 0 failures, 0 errors.
+* **`tests.test_operator_lockout_failclosed`:** 4 tests, 0 failures, 0 errors.
+* **`tests.test_narrow_fs_allowlist`:** 4 tests, 0 failures, 0 errors.
+* **`tests.test_negative_security_and_auth`:** 11 tests, 0 failures, 0 errors.
+* **`tests.test_boundary_auth_inventory`:** 7 tests, 0 failures, 0 errors.
+* **`tests.test_stage1_security`:** 21 tests, 0 failures, 0 errors.
+* **Legacy Suites (`test_backup`, `test_core_loop`, `test_phase2_capabilities`, etc.):** 85 tests, 0 failures, 0 errors.
+* **Total Passing Tests:** **141 / 141 (100% Pass Rate)**
