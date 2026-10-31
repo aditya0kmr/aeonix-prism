@@ -30,6 +30,8 @@ from aeonix.core.guardian import get_network_inventory, async_get_network_invent
 from aeonix.core.atlas_watch import run_supervisor_cycle
 from aeonix.core.spectra import get_channel_catalog, get_current_playback, set_playback_state, find_channel_by_query
 from aeonix.core.sanctuary import engage_sanctuary, release_sanctuary, get_sanctuary_status, is_sanctuary_active
+from aeonix.core.forge import draft_command_from_prompt, execute_sandboxed_command, get_git_telemetry
+from aeonix.core.visia import analyze_visual_artifact
 
 # Connected Fire TV and client WebSockets
 active_connections: Set[WebSocket] = set()
@@ -531,6 +533,67 @@ async def post_sanctuary_deactivate(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# =========================================================================
+# Phase 5: FORGE Developer Engine & VISIA Visual Intel Endpoints
+# =========================================================================
+
+async def post_forge_draft(request):
+    try:
+        body = await request.json()
+        prompt = body.get("prompt", "")
+        if not prompt:
+            return JSONResponse({"error": "Missing prompt"}, status_code=400)
+        draft = draft_command_from_prompt(prompt)
+        return JSONResponse({"success": True, "draft": draft})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_forge_execute(request):
+    try:
+        body = await request.json()
+        command = body.get("command", "")
+        actor = body.get("actor", "Aadi")
+        cwd = body.get("cwd")
+        if not command:
+            return JSONResponse({"error": "Missing command"}, status_code=400)
+        res = execute_sandboxed_command(command, actor=actor, cwd=cwd)
+        if res.get("status") == "sentinel_gate_hold":
+            await broadcast_message({
+                "type": "sentinel_card",
+                "request_id": res["request_id"],
+                "agent": "FORGE",
+                "action_type": "SHELL_COMMAND",
+                "target": command,
+                "risk_level": res["risk"]["risk_level"],
+                "scope": {"reason": res["risk"]["reason"]}
+            })
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_forge_git(request):
+    try:
+        telemetry = get_git_telemetry()
+        return JSONResponse({"success": True, "git": telemetry})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_visia_analyze(request):
+    try:
+        body = await request.json()
+        file_path = body.get("file_path")
+        case_id = body.get("case_id")
+        run_ocr = body.get("run_ocr", True)
+        actor = body.get("actor", "Aadi")
+
+        if not file_path or not os.path.exists(file_path):
+            return JSONResponse({"error": f"File not found: {file_path}"}, status_code=400)
+
+        analysis = analyze_visual_artifact(file_path, case_id=case_id, run_ocr=run_ocr, actor=actor)
+        return JSONResponse({"success": True, "analysis": analysis})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 app = Starlette(
     routes=[
         Route("/api/status", get_status, methods=["GET"]),
@@ -557,6 +620,10 @@ app = Starlette(
         Route("/api/sanctuary/status", get_sanctuary_status_endpoint, methods=["GET"]),
         Route("/api/sanctuary/activate", post_sanctuary_activate, methods=["POST"]),
         Route("/api/sanctuary/deactivate", post_sanctuary_deactivate, methods=["POST"]),
+        Route("/api/forge/draft", post_forge_draft, methods=["POST"]),
+        Route("/api/forge/execute", post_forge_execute, methods=["POST"]),
+        Route("/api/forge/git", get_forge_git, methods=["GET"]),
+        Route("/api/visia/analyze", post_visia_analyze, methods=["POST"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     lifespan=lifespan

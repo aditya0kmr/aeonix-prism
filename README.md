@@ -54,6 +54,7 @@ flowchart LR
 │   ├── db.py            # SQLite WAL vault, hash-chained audit_log, sentinel queue
 │   ├── discovery.py     # Zeroconf mDNS (_aeonix._tcp.local) broadcaster
 │   ├── fast_path.py     # Sub-millisecond router for weather, sentinel, media, sanctuary, network
+│   ├── forge.py         # Autonomous developer engine, sandboxed execution & git telemetry
 │   ├── guardian.py      # Network perimeter defense & active subnet discovery
 │   ├── llama_runner.py  # Multi-tier dual model LLM runner (0.5B Fast / 1.5B Deep)
 │   ├── memory.py        # AADYA Memory Heart (FTS token search, daily briefing)
@@ -63,13 +64,15 @@ flowchart LR
 │   ├── server.py        # Starlette ASGI Daemon with WebSockets and REST APIs
 │   ├── spectra.py       # Media discovery & curated live IPTV streaming engine
 │   ├── stt.py           # Whisper STT engine with ARM NEON / Dotprod acceleration
-│   └── veritas.py       # Digital forensics vault, cryptographic chain of custody
+│   ├── veritas.py       # Digital forensics vault, cryptographic chain of custody
+│   └── visia.py         # Visual intelligence, document OCR & forensic EXIF extraction
 ├── surface/             # Fire TV Living Surface launcher source (CleanYourTV Leanback)
 ├── scripts/
 │   └── start-core.sh    # Wake-lock acquisition, vault integrity verify & Uvicorn startup
 ├── tests/
 │   ├── test_phase3.py   # Unit & integration verification test suite for Phase 3
-│   └── test_phase4.py   # Unit & integration verification test suite for Phase 4
+│   ├── test_phase4.py   # Unit & integration verification test suite for Phase 4
+│   └── test_phase5.py   # Unit & integration verification test suite for Phase 5
 ├── models/              # (Git-ignored) GGUF & GGML model weights
 └── data/                # (Git-ignored) SQLite WAL databases & forensic evidence
 ```
@@ -122,6 +125,16 @@ flowchart LR
   - Remote PTT microphone physical hardware muting on Fire TV to guarantee total acoustic privacy.
   - High-contrast obsidian-crimson Living Surface layout with one-touch release.
 
+### Phase 5: Forge Developer Engine & VISIA Visual Intelligence (100% Verified)
+- [x] **FORGE Autonomous Developer Engine**:
+  - Natural-language shell command drafting (`"check git status"`, `"rebuild launcher"`).
+  - Strict Consequential Risk Classification (R0 Safe to R4 Critical) with **Sentinel Gate hold** for any destructive operations (`rm`, `git reset --hard`, `kill -9`).
+  - Real-time Git repository telemetry (branch name, commit hash, uncommitted change counts).
+- [x] **VISIA Visual Forensic & Document OCR**:
+  - Offline document OCR text extraction powered by native `tesseract` 5.5.4 with ARM NEON acceleration.
+  - Forensic EXIF metadata parsing (camera make/model, timestamps, software, GPS telemetry).
+  - Cryptographic SHA-256 digest computation with direct linkage to VERITAS Forensic Vault cases.
+
 ---
 
 ## 4. API Reference
@@ -150,6 +163,10 @@ flowchart LR
 | `/api/sanctuary/status` | `GET` | Returns active Sanctuary lockdown status |
 | `/api/sanctuary/activate` | `POST` | Engages one-touch Sanctuary lockdown posture |
 | `/api/sanctuary/deactivate` | `POST` | Disengages Sanctuary lockdown and restores normal surface |
+| `/api/forge/draft` | `POST` | Translates natural language directive into shell command with risk assessment |
+| `/api/forge/execute` | `POST` | Executes sandboxed command or halts at Sentinel Gate if consequential |
+| `/api/forge/git` | `GET` | Returns Git repository branch, commit, and working tree telemetry |
+| `/api/visia/analyze` | `POST` | Forensic image analysis, EXIF extraction, offline OCR & VERITAS linkage |
 | `/ws` | `WS` | Real-time Living Surface synchronization, PTT audio streaming, and Sentinel Gate events |
 
 ---

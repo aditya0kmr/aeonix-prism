@@ -69,6 +69,12 @@ COMMAND_TRIGGERS = {
     ],
     "supervisor_health": [
         "supervisor", "system supervisor", "atlas watch", "self healing status", "node status"
+    ],
+    "git_telemetry": [
+        "git status", "repository status", "git branch", "commit status", "latest commit"
+    ],
+    "forge_status": [
+        "developer status", "forge status", "developer deck"
     ]
 }
 
@@ -242,6 +248,36 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
             "type": "supervisor"
         }
         screen = "living_surface"
+
+    elif action == "git_telemetry":
+        from aeonix.core.forge import get_git_telemetry
+        git_info = get_git_telemetry()
+        if git_info.get("success"):
+            clean_str = "Clean" if git_info["is_clean"] else f"{git_info['modified_files']} Modified"
+            speech = f"Git repository {git_info['repository']} on branch {git_info['branch']}. Working tree is {clean_str}."
+            card = {
+                "title": f"FORGE // {git_info['repository']}",
+                "content": f"Branch: {git_info['branch']}\nCommit: {git_info['latest_commit']}\nStatus: {clean_str}",
+                "type": "developer"
+            }
+        else:
+            speech = "Unable to read Git telemetry."
+            card = {"title": "FORGE // Git", "content": "No git repository found", "type": "developer"}
+        screen = "focus"
+        extra_data["git"] = git_info
+
+    elif action == "forge_status":
+        from aeonix.core.forge import get_git_telemetry
+        git_info = get_git_telemetry()
+        branch = git_info.get("branch", "main")
+        speech = f"FORGE Developer Engine online on branch {branch}. Sandboxed terminal ready for verified directives."
+        card = {
+            "title": "FORGE Developer Engine",
+            "content": f"Branch: {branch}\nRisk Gate: Active (Sentinel)\nStatus: Ready",
+            "type": "developer"
+        }
+        screen = "focus"
+        extra_data["git"] = git_info
 
     elif action == "mode_sanctuary":
         from aeonix.core.sanctuary import engage_sanctuary
