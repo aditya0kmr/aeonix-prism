@@ -3,12 +3,26 @@
 * **Status:** Adopted
 * **Date:** 2026-10-31
 * **Deciders:** Sovereign Operator (Aadi) & Core Architecture Agent
-* **Governing Specification:** [`AEONIX_PRISM_Reconciled_Master_Engineering_v4.md`](file:///data/data/com.termux/files/home/gdrive_zip/extracted/AEONIX_PRISM_Reconciled_Master_Engineering_v4.md)
-* **Requirements Seed:** [`AEONIX_PRISM_Requirements_Seed.csv`](file:///data/data/com.termux/files/home/gdrive_zip/extracted/AEONIX_PRISM_Requirements_Seed.csv) (427 requirement seeds across 54 capability owners)
+* **Canonical Gate Statuses:**
+  * **Gate G0 (Audit & Recovery Baseline):** **PARTIAL** (Disaster recovery verified, active baseline established, multi-device release verification in progress)
+  * **Gate G1 (Authority Foundation):** **OPEN** (Authority foundation hardened, negative security suites verified, active vault encryption migration deferred pending formal G1 sign-off)
 
 ---
 
-## 1. Context and Problem Statement
+## 1. Governing Specification Baseline & Cryptographic Manifest
+
+The portable baseline documents have been incorporated into the repository under `docs/baseline/`. Their canonical cryptographic SHA-256 fingerprints are recorded below:
+
+| Baseline Document | Repository Relative Path | Canonical SHA-256 Hash | Description |
+|---|---|---|---|
+| Master Engineering Specification | [`docs/baseline/AEONIX_PRISM_Reconciled_Master_Engineering_v4.md`](../baseline/AEONIX_PRISM_Reconciled_Master_Engineering_v4.md) | `c8d465c5c83bae2e4edb439dbd20e31e47cdfa0cdd87d05874fb2e19082b66d6` | Reconciled Master Engineering Specification v4.0 |
+| Requirements Seed Catalog | [`docs/baseline/AEONIX_PRISM_Requirements_Seed.csv`](../baseline/AEONIX_PRISM_Requirements_Seed.csv) | `a6122b62956b4256e49faa3b9697b5966308ec6cb9e6450b624812ce49d6c600` | 427 requirement seeds across 54 capability owners |
+| Engineering Guide | [`docs/baseline/AEONIX_PRISM_START_HERE.md`](../baseline/AEONIX_PRISM_START_HERE.md) | `e7fcf64237dcfefeb324112865b4b9fbb16780cd285ba7e9807d11d4f93ae463` | Agent onboarding guide & operational constraints |
+| Source Manifest | [`docs/baseline/source_manifest.csv`](../baseline/source_manifest.csv) | `5dee6307d00c1a6acd6a60af87fb77d7512965cc799109d8e5ef7ad7ba2023d0` | 18 ancestral artifacts catalog from Google Drive |
+
+---
+
+## 2. Context and Problem Statement
 
 The project originated across 18 separate design documents and conversational blueprints in Google Drive (`1ARRSEmUAE1lw3ubuBspiPEg35BeBsa-N`). Over time, these documents introduced competing architectural assumptions:
 * Approval flows in early diagrams depicted approvals granted directly via the Fire TV remote, contradicting the sovereign root-of-trust security model.
@@ -21,7 +35,7 @@ The newly provided `AEONIX_PRISM_Agent_Implementation_Packet_v4.zip` establishes
 
 ---
 
-## 2. Decision Register (D01 – D18)
+## 3. Decision Register (D01 – D18)
 
 We formally adopt the 18 governing decisions established in Section 2 of Specification v4.0:
 
@@ -43,8 +57,8 @@ We formally adopt the 18 governing decisions established in Section 2 of Specifi
 16. **D16 (Safety Boundaries):** Legitimate personal assistant and defensive OSINT ambition; zero unauthorized intrusion, covert recording, or private account bypassing.
 17. **D17 (Nomenclature & Register):** 54 capability owners registered in Section 26. Ancestral codenames map into current modules (e.g., NOEMA owns memory, LUMEN owns display context, SPECTRA owns media/IPTV).
 18. **D18 (G0–G12 Gates):** Structured progression through canonical gates:
-    * G0: Audit/Recovery Baseline
-    * G1: Authority Foundation
+    * G0: Audit/Recovery Baseline (PARTIAL)
+    * G1: Authority Foundation (OPEN)
     * G2: Durable Core & Active Encrypted Memory
     * G3: PRISM UI Vertical Slice
     * G4: VOX Baseline
@@ -59,7 +73,7 @@ We formally adopt the 18 governing decisions established in Section 2 of Specifi
 
 ---
 
-## 3. Superseded Legacy Instructions
+## 4. Superseded Legacy Instructions
 
 This ADR explicitly records that the following older document instructions are superseded:
 1. **Fire TV Remote Approval:** Any flow showing remote approval of consequential actions is superseded by D05 (manual POCO operator approval only).

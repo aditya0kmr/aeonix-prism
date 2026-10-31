@@ -30,6 +30,25 @@ ALLOWED_BASE_DIRS = [
     tempfile.gettempdir()
 ]
 
+# Narrow allowlist for mutating filesystem operations
+NARROW_FS_ALLOWLIST = [
+    os.path.realpath(tempfile.gettempdir()),
+    os.path.realpath("/tmp"),
+    os.path.realpath("/data/data/com.termux/files/usr/tmp"),
+    os.path.realpath(os.path.expanduser("~/aeonix/workspace")),
+    os.path.realpath(os.path.expanduser("~/aeonix/scratch")),
+    os.path.realpath(os.path.expanduser("~/.gemini/antigravity-cli")),
+]
+
+def is_within_narrow_fs_allowlist(target_path: str) -> bool:
+    """Validates that path resides strictly within allowlisted writable trees."""
+    resolved = os.path.realpath(os.path.abspath(target_path))
+    for root in NARROW_FS_ALLOWLIST:
+        real_root = os.path.realpath(root)
+        if resolved == real_root or resolved.startswith(real_root + os.sep):
+            return True
+    return False
+
 # Typed Operations Catalog
 TYPED_OPERATIONS = {
     "git_status": {
@@ -264,6 +283,12 @@ def execute_typed_operation(
                             "error": f"PROTECTED_RESOURCE: Removal of critical system artifact '{clean_arg}' is strictly prohibited.",
                             "status": "denied"
                         }
+                    if not is_within_narrow_fs_allowlist(resolved_path):
+                        return {
+                            "success": False,
+                            "error": f"TARGET_OUTSIDE_ALLOWLIST: Path '{clean_arg}' (resolved: '{resolved_path}') is outside allowed filesystem directories.",
+                            "status": "denied"
+                        }
 
     # Consequential Gate
     if op["is_consequential"]:
@@ -315,6 +340,13 @@ def execute_typed_operation(
         for a in extra_args:
             clean_arg = str(a).strip()
             if any(char in clean_arg for char in [";", "|", "&", "$", "`", "\n"]):
+                if op["is_consequential"] and sentinel_request_id:
+                    complete_sentinel_execution(
+                        sentinel_request_id,
+                        success=False,
+                        error_msg=f"ILLEGAL_ARGUMENT: Shell metacharacters are prohibited: {clean_arg}",
+                        db_path=target_db
+                    )
                 return {
                     "success": False,
                     "error": f"ILLEGAL_ARGUMENT: Shell metacharacters are prohibited: {clean_arg}",
@@ -324,6 +356,13 @@ def execute_typed_operation(
                 # 1. Per-operation option validation
                 if clean_arg.startswith("-"):
                     if clean_arg not in {"-f", "-r", "-rf", "-v"}:
+                        if op["is_consequential"] and sentinel_request_id:
+                            complete_sentinel_execution(
+                                sentinel_request_id,
+                                success=False,
+                                error_msg=f"ILLEGAL_OPTION: Option '{clean_arg}' is strictly prohibited for file_remove",
+                                db_path=target_db
+                            )
                         return {
                             "success": False,
                             "error": f"ILLEGAL_OPTION: Option '{clean_arg}' is strictly prohibited for file_remove",
@@ -365,6 +404,21 @@ def execute_typed_operation(
                         return {
                             "success": False,
                             "error": f"PROTECTED_RESOURCE: Removal of critical system artifact '{clean_arg}' is strictly prohibited.",
+                            "status": "denied"
+                        }
+
+                    # 3. Positive narrow allowlist validation
+                    if not is_within_narrow_fs_allowlist(resolved_path):
+                        if sentinel_request_id:
+                            complete_sentinel_execution(
+                                sentinel_request_id,
+                                success=False,
+                                error_msg=f"TARGET_OUTSIDE_ALLOWLIST: Path '{clean_arg}' (resolved: '{resolved_path}') is outside allowed filesystem directories.",
+                                db_path=target_db
+                            )
+                        return {
+                            "success": False,
+                            "error": f"TARGET_OUTSIDE_ALLOWLIST: Path '{clean_arg}' (resolved: '{resolved_path}') is outside allowed filesystem directories.",
                             "status": "denied"
                         }
             arg_list.append(clean_arg)

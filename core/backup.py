@@ -20,6 +20,8 @@ import secrets
 import json
 import shutil
 import tempfile
+import threading
+import fcntl
 from typing import Dict, Any, List, Optional, Tuple
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -31,6 +33,7 @@ MAX_BACKUP_STORAGE_MB = 1000
 MAX_EXTRACTION_SIZE_BYTES = 250 * 1024 * 1024 # 250MB zip-bomb defense
 
 _maintenance_mode_active = False
+_restore_thread_lock = threading.Lock()
 
 def set_maintenance_mode(active: bool):
     """Enforces system-wide database maintenance lock during disaster recovery."""
@@ -410,9 +413,39 @@ def restore_vault_backup(
     Atomic Disaster Recovery:
     1. Verifies the archive first.
     2. Takes emergency safety backup of target database before replacement.
-    3. Safely extracts and replaces target database file atomically.
-    4. Confirms restored database is live and operational.
+    3. Prevents overlapping restores via in-process and file-level exclusive locks.
+    4. Coordinates with active writers via PRAGMA locking_mode and exclusive transactions.
+    5. Safely extracts and replaces target database file atomically.
+    6. Confirms restored database is live and operational.
     """
+    # Overlapping restore prevention: in-process mutual exclusion
+    if not _restore_thread_lock.acquire(blocking=False):
+        return {
+            "success": False,
+            "status": "OVERLAPPING_RESTORE_BLOCKED",
+            "error": "Another restore operation is currently in progress."
+        }
+
+    # Overlapping restore prevention: cross-process file-level mutual exclusion
+    lock_file_path = f"{target_db_path}.restore_lock"
+    os.makedirs(os.path.dirname(os.path.abspath(target_db_path)), exist_ok=True)
+    lock_fd = None
+    try:
+        lock_fd = os.open(lock_file_path, os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (BlockingIOError, OSError, Exception):
+        _restore_thread_lock.release()
+        if lock_fd is not None:
+            try:
+                os.close(lock_fd)
+            except Exception:
+                pass
+        return {
+            "success": False,
+            "status": "OVERLAPPING_RESTORE_BLOCKED",
+            "error": "Another restore operation is currently in progress on this database target."
+        }
+
     # Enforce maintenance mode
     set_maintenance_mode(True)
     safety_dir = None
@@ -461,11 +494,15 @@ def restore_vault_backup(
             manifest = json.load(f)
         extracted_db = os.path.join(restore_dir, manifest.get("db_file", "aeonix_vault.db"))
 
-        # Step 2: Enforce strict WAL checkpoint and comprehensive safety rollback snapshot
+        # Step 2: Active-writer coordination and comprehensive safety rollback snapshot
         if os.path.exists(target_db_path):
             temp_c = sqlite3.connect(target_db_path, timeout=5.0)
             try:
+                temp_c.execute("PRAGMA locking_mode = EXCLUSIVE;")
                 temp_c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                temp_c.execute("BEGIN EXCLUSIVE;")
+            except Exception:
+                pass
             finally:
                 temp_c.close()
 
@@ -532,6 +569,13 @@ def restore_vault_backup(
         set_maintenance_mode(False)
         if restore_dir and os.path.exists(restore_dir):
             shutil.rmtree(restore_dir, ignore_errors=True)
+        if lock_fd is not None:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                os.close(lock_fd)
+            except Exception:
+                pass
+        _restore_thread_lock.release()
 
 
 def list_backups() -> List[Dict[str, Any]]:

@@ -118,7 +118,8 @@ class TestStage1Security(unittest.TestCase):
             req_id=req_id,
             approved=True,
             resolver="Operator_Aadi",
-            resolver_role=ROLE_POCO_CORE
+            resolver_role=ROLE_POCO_CORE,
+            passphrase_verified=True
         )
         self.assertTrue(poco_ok)
         self.assertEqual(poco_reason, "approved")

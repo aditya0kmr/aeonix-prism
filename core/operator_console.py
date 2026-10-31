@@ -47,6 +47,20 @@ def _ensure_secrets_dir(secrets_dir: str = SECRETS_DIR):
     os.makedirs(secrets_dir, mode=0o700, exist_ok=True)
 
 
+def _atomic_write_json(file_path: str, data: Dict[str, Any]):
+    """Atomically writes JSON payload using temporary file replacement and fsync."""
+    dir_name = os.path.dirname(file_path)
+    if dir_name:
+        os.makedirs(dir_name, mode=0o700, exist_ok=True)
+    tmp_path = f"{file_path}.tmp_{os.getpid()}_{secrets.token_hex(4)}"
+    with open(tmp_path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, file_path)
+
+
 def is_operator_setup(secrets_dir: str = SECRETS_DIR) -> bool:
     """Returns True if operator passphrase has been configured."""
     pin_file = os.path.join(secrets_dir, "operator_pin.json")
@@ -56,6 +70,8 @@ def is_operator_setup(secrets_dir: str = SECRETS_DIR) -> bool:
 def is_operator_locked(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, int]:
     """
     Checks persistent lockout state.
+    FAIL-CLOSED: If the lockout file exists but cannot be parsed or read,
+    locks out the console by default (300s, 999 attempts).
     Returns (is_locked: bool, remaining_seconds: float, failed_attempts: int).
     """
     lock_file = os.path.join(secrets_dir, "operator_lockout.json")
@@ -73,12 +89,13 @@ def is_operator_locked(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, int
             return True, round(lockout_until - now, 1), failed_attempts
         return False, 0.0, failed_attempts
     except Exception:
-        return False, 0.0, 0
+        # FAIL-CLOSED: Malformed, corrupted, or unreadable lock file must enforce lockout
+        return True, 300.0, 999
 
 
 def record_failed_attempt(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, int]:
     """
-    Records a failed passphrase attempt and updates persistent lockout state.
+    Records a failed passphrase attempt and updates persistent lockout state atomically.
     """
     _ensure_secrets_dir(secrets_dir)
     lock_file = os.path.join(secrets_dir, "operator_lockout.json")
@@ -92,7 +109,8 @@ def record_failed_attempt(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, 
                 data = json.load(f)
             failed_attempts = data.get("failed_attempts", 0) + 1
         except Exception:
-            pass
+            # If corrupted, jump to maximum lockout
+            failed_attempts = 7
 
     # Exponential lockout schedule: 3 attempts -> 30s, 5 attempts -> 60s, 7+ attempts -> 300s
     if failed_attempts >= 7:
@@ -104,16 +122,11 @@ def record_failed_attempt(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, 
 
     lockout_until = now + lockout_duration if lockout_duration > 0 else 0.0
 
-    with open(lock_file, "w") as f:
-        json.dump({
-            "failed_attempts": failed_attempts,
-            "lockout_until": lockout_until,
-            "last_attempt_at": now
-        }, f)
-    try:
-        os.chmod(lock_file, 0o600)
-    except Exception:
-        pass
+    _atomic_write_json(lock_file, {
+        "failed_attempts": failed_attempts,
+        "lockout_until": lockout_until,
+        "last_attempt_at": now
+    })
 
     return (lockout_duration > 0), lockout_duration, failed_attempts
 
@@ -123,11 +136,57 @@ def reset_lockout_state(secrets_dir: str = SECRETS_DIR):
     lock_file = os.path.join(secrets_dir, "operator_lockout.json")
     if os.path.exists(lock_file):
         try:
-            with open(lock_file, "w") as f:
-                json.dump({"failed_attempts": 0, "lockout_until": 0.0, "last_attempt_at": time.time()}, f)
-            os.chmod(lock_file, 0o600)
+            _atomic_write_json(lock_file, {
+                "failed_attempts": 0, 
+                "lockout_until": 0.0, 
+                "last_attempt_at": time.time()
+            })
         except Exception:
             pass
+
+
+def reset_operator_credentials(
+    secrets_dir: str = SECRETS_DIR, 
+    confirm: bool = False, 
+    db_path: str = DB_PATH
+) -> Tuple[bool, str]:
+    """
+    Deliberate physical operator reset procedure.
+    Requires explicit confirm=True.
+    Invalidates stored PIN/hash, resets lockout state, and revokes operator sessions.
+    """
+    if not confirm:
+        return False, "CONFIRMATION_REQUIRED: Deliberate local operator action required (confirm=True)."
+
+    pin_file = os.path.join(secrets_dir, "operator_pin.json")
+    lock_file = os.path.join(secrets_dir, "operator_lockout.json")
+
+    if os.path.exists(pin_file):
+        try:
+            os.remove(pin_file)
+        except Exception as e:
+            return False, f"FAILED_TO_REMOVE_PIN: {str(e)}"
+
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+        except Exception:
+            pass
+
+    # Revoke operator tokens in DB
+    try:
+        from aeonix.core.auth import revoke_token
+        conn = get_connection(db_path, allow_maintenance=True)
+        cur = conn.cursor()
+        cur.execute("SELECT nonce FROM issued_tokens WHERE role = ? AND revoked = 0;", (ROLE_POCO_CORE,))
+        for r in cur.fetchall():
+            revoke_token(r["nonce"], reason="operator_credentials_reset", db_path=db_path)
+        conn.close()
+    except Exception:
+        pass
+
+    log_audit_event("OPERATOR", "reset_operator_credentials", "operator_console", "ok", {"reason": "deliberate_physical_reset"}, db_path=db_path)
+    return True, "RESET_SUCCESSFUL: Operator credentials reset. Console returned to first-run setup state."
 
 
 def setup_operator_secret(passphrase: str, secrets_dir: str = SECRETS_DIR) -> Tuple[bool, str]:
@@ -154,12 +213,10 @@ def setup_operator_secret(passphrase: str, secrets_dir: str = SECRETS_DIR) -> Tu
         "hash_hex": h.hex(),
         "created_at": time.time()
     }
-    with open(pin_file, "w") as f:
-        json.dump(payload, f, indent=2)
-    try:
-        os.chmod(pin_file, 0o600)
-    except Exception:
-        pass
+    _atomic_write_json(pin_file, payload)
+
+    log_audit_event("OPERATOR", "setup_secret", "operator_console", "ok", {"iterations": PBKDF2_ITERATIONS})
+    return True, "Operator passphrase initialized successfully"
 
     log_audit_event("OPERATOR", "setup_secret", "operator_console", "ok", {"iterations": PBKDF2_ITERATIONS})
     return True, "Operator passphrase initialized successfully"
@@ -279,12 +336,14 @@ def review_and_resolve_order(
     req_id: str,
     approved: bool,
     passphrase: Optional[str] = None,
+    expected_action_digest: Optional[str] = None,
     secrets_dir: str = SECRETS_DIR,
     db_path: str = DB_PATH
 ) -> Tuple[bool, str]:
     """
     Validates operator passphrase and resolves the Sentinel request.
     Approved=True strictly requires successful passphrase validation.
+    Enforces displayed-digest-to-approved-record binding.
     """
     if approved:
         if not passphrase:
@@ -298,6 +357,8 @@ def review_and_resolve_order(
         approved=approved,
         resolver="Sovereign_Operator_Console",
         resolver_role=ROLE_POCO_CORE,
+        passphrase_verified=True if approved else False,
+        expected_action_digest=expected_action_digest,
         db_path=db_path
     )
     return ok, reason
@@ -353,7 +414,14 @@ def run_interactive_console():
             print(f"[*] Order {req['id']} Denied: {reason}")
         elif choice == "A":
             pwd = getpass.getpass("Enter operator passphrase to approve: ")
-            ok, reason = review_and_resolve_order(req["id"], approved=True, passphrase=pwd)
+            req_digest = req.get("action_digest")
+            if not req_digest:
+                try:
+                    sc = json.loads(req.get("scope_json", "{}"))
+                except Exception:
+                    sc = {}
+                req_digest = compute_action_digest(req["id"], req["agent"], req["action_type"], req["target"], sc)
+            ok, reason = review_and_resolve_order(req["id"], approved=True, passphrase=pwd, expected_action_digest=req_digest)
             if ok:
                 print(f"[+] Order {req['id']} Approved successfully: {reason}")
             else:

@@ -20,8 +20,10 @@ from aeonix.core.db import (
     get_connection,
     log_audit_event,
     queue_sentinel_request,
-    resolve_sentinel_request
+    resolve_sentinel_request,
+    compute_action_digest
 )
+from aeonix.core.operator_console import verify_operator_secret
 from aeonix.core.auth import (
     verify_token,
     issue_device_token,
@@ -149,12 +151,37 @@ async def resolve_sentinel(request):
         if auth_role == "UNAUTHENTICATED":
             return JSONResponse({"error": "Missing or invalid authorization header"}, status_code=401)
 
-        if approved is True and auth_role != ROLE_POCO_CORE:
-            return JSONResponse({
-                "error": "POCO_AUTHORITY_REQUIRED: Approval of consequential actions is restricted strictly to POCO Core Mind"
-            }, status_code=403)
+        passphrase_verified = False
+        expected_action_digest = body.get("action_digest")
 
-        ok, status_reason = resolve_sentinel_request(req_id, approved, resolver=actor, resolver_role=auth_role)
+        if approved is True:
+            if auth_role != ROLE_POCO_CORE:
+                return JSONResponse({
+                    "error": "POCO_AUTHORITY_REQUIRED: Approval of consequential actions is restricted strictly to POCO Core Mind"
+                }, status_code=403)
+
+            operator_passphrase = body.get("operator_passphrase") or request.headers.get("X-Operator-Passphrase")
+            if not operator_passphrase:
+                return JSONResponse({
+                    "error": "OPERATOR_PASSPHRASE_REQUIRED: Approval of consequential actions strictly requires operator passphrase verification"
+                }, status_code=403)
+
+            is_valid, msg = verify_operator_secret(operator_passphrase)
+            if not is_valid:
+                return JSONResponse({
+                    "error": f"OPERATOR_AUTH_FAILED: {msg}"
+                }, status_code=403)
+
+            passphrase_verified = True
+
+        ok, status_reason = resolve_sentinel_request(
+            req_id, 
+            approved, 
+            resolver=actor, 
+            resolver_role=auth_role,
+            passphrase_verified=passphrase_verified,
+            expected_action_digest=expected_action_digest
+        )
         if ok:
             # Broadcast resolution event to TV over WebSocket
             await broadcast_message({
@@ -181,6 +208,7 @@ async def create_sentinel(request):
         ttl = int(body.get("ttl_seconds", 300))
 
         req_id = queue_sentinel_request(agent, action_class, action_type, target, scope, risk_level, ttl)
+        action_digest = compute_action_digest(req_id, agent, action_type, target, scope)
         await broadcast_message({
             "type": "sentinel_card",
             "request_id": req_id,
@@ -188,9 +216,10 @@ async def create_sentinel(request):
             "action_type": action_type,
             "target": target,
             "risk_level": risk_level,
-            "scope": scope
+            "scope": scope,
+            "action_digest": action_digest
         })
-        return JSONResponse({"success": True, "request_id": req_id, "risk_level": risk_level})
+        return JSONResponse({"success": True, "request_id": req_id, "risk_level": risk_level, "action_digest": action_digest})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 

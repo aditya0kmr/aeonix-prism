@@ -256,7 +256,7 @@ class TestBoundaryAuthInventory(unittest.TestCase):
         self.assertFalse(ok_pend, "complete_sentinel_execution must reject completion from 'pending' state")
 
         # 2. Transition to 'approved'
-        resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, db_path=self.db_path)
+        resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, db_path=self.db_path)
 
         # State is 'approved' -> complete_sentinel_execution must FAIL (must be claimed first)
         ok_app = complete_sentinel_execution(req_id, success=True, db_path=self.db_path)

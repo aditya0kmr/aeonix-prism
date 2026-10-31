@@ -28,9 +28,23 @@ def get_connection(db_path: str = DB_PATH, allow_maintenance: bool = False) -> s
     conn.execute("PRAGMA busy_timeout = 5000;")
     return conn
 
+def compute_action_digest(
+    request_id: str,
+    agent: str,
+    action_type: str,
+    target: str,
+    scope: Dict[str, Any]
+) -> str:
+    """
+    Derives deterministic cryptographic SHA-256 digest binding exact execution parameters.
+    """
+    scope_canonical = json.dumps(scope, sort_keys=True)
+    canonical_payload = f"{request_id}|{agent}|{action_type}|{target}|{scope_canonical}"
+    return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
+
 def init_database(db_path: str = DB_PATH) -> bool:
     """Initializes tables and performs integrity checks."""
-    conn = get_connection(db_path)
+    conn = get_connection(db_path, allow_maintenance=True)
     cur = conn.cursor()
     
     # Verify DB integrity first
@@ -100,7 +114,13 @@ def init_database(db_path: str = DB_PATH) -> bool:
         expires_at REAL NOT NULL,
         approved_by TEXT,
         approved_at REAL,
-        audit_hash TEXT
+        audit_hash TEXT,
+        action_digest TEXT NOT NULL DEFAULT '',
+        claimed_by TEXT,
+        claimed_at REAL,
+        completed_at REAL,
+        output_summary TEXT,
+        error_msg TEXT
     );
 
     -- Cryptographic Hash-Chained Audit Trail
@@ -233,6 +253,24 @@ def init_database(db_path: str = DB_PATH) -> bool:
             ("firetv_glass", "Fire TV Stick Lite", "glass_terminal", "10.116.23.179", "sovereign_terminal", time.time(), "paired")
         )
 
+    # Dynamic column migration for sentinel_requests schema
+    cur.execute("PRAGMA table_info(sentinel_requests);")
+    existing_cols = {row["name"] for row in cur.fetchall()}
+    columns_to_add = [
+        ("action_digest", "TEXT NOT NULL DEFAULT ''"),
+        ("claimed_by", "TEXT"),
+        ("claimed_at", "REAL"),
+        ("completed_at", "REAL"),
+        ("output_summary", "TEXT"),
+        ("error_msg", "TEXT")
+    ]
+    for col_name, col_def in columns_to_add:
+        if col_name not in existing_cols:
+            try:
+                cur.execute(f"ALTER TABLE sentinel_requests ADD COLUMN {col_name} {col_def};")
+            except Exception:
+                pass
+
     conn.commit()
     conn.close()
     return True
@@ -248,6 +286,14 @@ def log_audit_event(
     allow_maintenance: bool = False
 ) -> str:
     """Appends an event to audit_log with cryptographic SHA-256 hash chaining."""
+    if not allow_maintenance:
+        try:
+            from aeonix.core.backup import is_maintenance_mode
+            if is_maintenance_mode():
+                raise sqlite3.OperationalError("DATABASE_LOCKED: System is in disaster recovery maintenance mode")
+        except ImportError:
+            pass
+
     should_close = False
     if conn is None:
         conn = get_connection(db_path, allow_maintenance=allow_maintenance)
@@ -284,12 +330,13 @@ def queue_sentinel_request(agent: str, action_class: str, action_type: str, targ
     req_id = f"sentinel_{int(time.time()*1000)}_{os.urandom(3).hex()}"
     now = time.time()
     expires_at = now + ttl_seconds
-    scope_str = json.dumps(scope)
+    scope_str = json.dumps(scope, sort_keys=True)
+    action_digest = compute_action_digest(req_id, agent, action_type, target, scope)
     
     cur.execute("""
-        INSERT INTO sentinel_requests (id, agent, action_class, action_type, target, scope_json, risk_level, status, created_at, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?);
-    """, (req_id, agent, action_class, action_type, target, scope_str, risk_level, now, expires_at))
+        INSERT INTO sentinel_requests (id, agent, action_class, action_type, target, scope_json, risk_level, status, created_at, expires_at, action_digest)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?);
+    """, (req_id, agent, action_class, action_type, target, scope_str, risk_level, now, expires_at, action_digest))
 
     conn.commit()
     conn.close()
@@ -299,7 +346,7 @@ def queue_sentinel_request(agent: str, action_class: str, action_type: str, targ
         action="sentinel_request_created",
         target=target,
         result="queued",
-        details={"request_id": req_id, "risk_level": risk_level, "action_type": action_type},
+        details={"request_id": req_id, "risk_level": risk_level, "action_type": action_type, "action_digest": action_digest},
         db_path=db_path
     )
     return req_id
@@ -421,6 +468,8 @@ def claim_sentinel_authorization(
     expected_target: Optional[str] = None,
     expected_action: Optional[str] = None,
     expected_scope: Optional[Dict[str, Any]] = None,
+    expected_digest: Optional[str] = None,
+    claimer: str = "FORGE",
     db_path: str = DB_PATH
 ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
     """
@@ -432,6 +481,7 @@ def claim_sentinel_authorization(
     - If expected_target is specified, must match row['target'].
     - If expected_action is specified, must match row['action_type'] or row['action_class'].
     - If expected_scope is specified, validates exact scope_json matching (cwd, extra_args).
+    - If expected_digest is specified or record contains action_digest, validates Action Digest.
     - Single-use only: Rejects replay attempts with ALREADY_CONSUMED.
     Returns (is_claimed: bool, request_dict: Optional[dict], reason: str).
     """
@@ -497,20 +547,44 @@ def claim_sentinel_authorization(
                 conn.close()
                 return False, req_dict, f"SCOPE_PARSE_ERROR: {str(e)}"
 
-        # Atomically transition to 'claimed'
-        cur.execute("UPDATE sentinel_requests SET status = 'claimed' WHERE id = ?;", (req_id,))
+        # Validate Action Digest Binding
+        stored_digest = req_dict.get("action_digest")
+        if stored_digest:
+            stored_scope_obj = json.loads(req_dict["scope_json"]) if req_dict.get("scope_json") else {}
+            recalc_digest = compute_action_digest(
+                req_dict["id"], req_dict["agent"], req_dict["action_type"], req_dict["target"], stored_scope_obj
+            )
+            if stored_digest != recalc_digest:
+                conn.rollback()
+                conn.close()
+                return False, req_dict, "DIGEST_MISMATCH: Stored action digest does not match record parameters"
+
+            if expected_digest and expected_digest != stored_digest:
+                conn.rollback()
+                conn.close()
+                return False, req_dict, f"DIGEST_MISMATCH: Expected digest '{expected_digest}' does not match record digest '{stored_digest}'"
+
+        # Atomically transition to 'claimed' with metadata
+        cur.execute("""
+            UPDATE sentinel_requests 
+            SET status = 'claimed', claimed_by = ?, claimed_at = ? 
+            WHERE id = ?;
+        """, (claimer, now, req_id))
+
         log_audit_event(
             actor="SENTINEL_GATE",
             action="authorization_claimed",
             target=req_dict["target"],
             result="claimed",
-            details={"request_id": req_id, "action_type": req_dict["action_type"], "claimed_at": now},
+            details={"request_id": req_id, "action_type": req_dict["action_type"], "claimed_by": claimer, "claimed_at": now},
             db_path=db_path,
             conn=conn
         )
         conn.commit()
         conn.close()
         req_dict["status"] = "claimed"
+        req_dict["claimed_by"] = claimer
+        req_dict["claimed_at"] = now
         return True, req_dict, "CLAIMED_SUCCESS"
     except Exception as e:
         conn.rollback()
@@ -528,6 +602,7 @@ def complete_sentinel_execution(
     Finalizes execution lifecycle: transitions status from 'claimed' to 'completed' or 'failed'.
     Strictly enforces that starting status must be 'claimed'.
     Rejects transition from 'pending', 'approved', 'expired', or already finalized states.
+    Persists completion timestamp, output summary, and error message for claim finalization.
     """
     conn = get_connection(db_path, allow_maintenance=True)
     cur = conn.cursor()
@@ -552,15 +627,21 @@ def complete_sentinel_execution(
         target = row["target"] if isinstance(row, sqlite3.Row) else row[1]
         action = row["action_type"] if isinstance(row, sqlite3.Row) else row[2]
 
-        cur.execute("UPDATE sentinel_requests SET status = ? WHERE id = ?;", (new_status, req_id))
+        cur.execute("""
+            UPDATE sentinel_requests 
+            SET status = ?, completed_at = ?, output_summary = ?, error_msg = ? 
+            WHERE id = ?;
+        """, (new_status, now, (output_summary or "")[:512], error_msg, req_id))
+
         log_audit_event(
             actor="SENTINEL_GATE",
             action=f"execution_{new_status}",
             target=target,
             result=new_status,
-            details={"request_id": req_id, "action": action, "output": output_summary[:256], "error": error_msg, "completed_at": now},
+            details={"request_id": req_id, "action": action, "output": (output_summary or "")[:256], "error": error_msg, "completed_at": now},
             db_path=db_path,
-            conn=conn
+            conn=conn,
+            allow_maintenance=True
         )
         conn.commit()
         conn.close()
@@ -575,6 +656,7 @@ def consume_sentinel_authorization(
     expected_target: Optional[str] = None,
     expected_action: Optional[str] = None,
     expected_scope: Optional[Dict[str, Any]] = None,
+    expected_digest: Optional[str] = None,
     db_path: str = DB_PATH
 ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
     """
@@ -587,6 +669,8 @@ def consume_sentinel_authorization(
         expected_target=expected_target,
         expected_action=expected_action,
         expected_scope=expected_scope,
+        expected_digest=expected_digest,
+        claimer="SENTINEL_CONSUME",
         db_path=db_path
     )
     if is_claimed:
@@ -598,12 +682,16 @@ def resolve_sentinel_request(
     approved: bool, 
     resolver: str = "Aadi", 
     resolver_role: str = "POCO_CORE",
+    passphrase_verified: bool = False,
+    expected_action_digest: Optional[str] = None,
     db_path: str = DB_PATH
 ) -> Tuple[bool, str]:
     """
     Atomically resolves a pending Sentinel request (Approved or Denied).
     Mandates:
     - Only POCO_CORE role can grant approval.
+    - Consequential approval strictly requires passphrase_verified=True (eliminating bearer token bypass).
+    - Enforces displayed-digest-to-approved-record binding.
     - FIRETV_GLASS can deny/cancel, but cannot approve consequential actions.
     - Strict boolean validation.
     - Rejects expired and already-resolved requests.
@@ -640,19 +728,54 @@ def resolve_sentinel_request(
             conn.close()
             return False, "EXPIRED: Request TTL has elapsed"
 
-        if approved is True and resolver_role != "POCO_CORE":
-            log_audit_event(
-                actor=resolver,
-                action="unauthorized_approval_attempt",
-                target=row["target"],
-                result="rejected",
-                details={"request_id": req_id, "resolver_role": resolver_role, "reason": "POCO-only approval authority mandate"},
-                db_path=db_path,
-                conn=conn
-            )
-            conn.commit()
-            conn.close()
-            return False, "POCO_AUTHORITY_REQUIRED: Approval restricted strictly to POCO Core Mind"
+        if approved is True:
+            # 1. Authority Check: POCO Core only
+            if resolver_role != "POCO_CORE":
+                log_audit_event(
+                    actor=resolver,
+                    action="unauthorized_approval_attempt",
+                    target=row["target"],
+                    result="rejected",
+                    details={"request_id": req_id, "resolver_role": resolver_role, "reason": "POCO-only approval authority mandate"},
+                    db_path=db_path,
+                    conn=conn
+                )
+                conn.commit()
+                conn.close()
+                return False, "POCO_AUTHORITY_REQUIRED: Approval restricted strictly to POCO Core Mind"
+
+            # 2. Operator Passphrase Verification Mandate (Item 1)
+            if not passphrase_verified:
+                log_audit_event(
+                    actor=resolver,
+                    action="unauthenticated_approval_attempt",
+                    target=row["target"],
+                    result="rejected",
+                    details={"request_id": req_id, "reason": "Bearer token alone cannot approve without operator passphrase verification"},
+                    db_path=db_path,
+                    conn=conn
+                )
+                conn.commit()
+                conn.close()
+                return False, "OPERATOR_PASSPHRASE_REQUIRED: Approval of consequential actions strictly requires operator passphrase verification"
+
+            # 3. Action Digest Binding Mandate (Item 2)
+            try:
+                scope_dict = json.loads(row["scope_json"])
+            except Exception:
+                scope_dict = {}
+            actual_digest = compute_action_digest(row["id"], row["agent"], row["action_type"], row["target"], scope_dict)
+            
+            stored_digest = row["action_digest"] if "action_digest" in row.keys() else ""
+            if stored_digest and stored_digest != actual_digest:
+                conn.rollback()
+                conn.close()
+                return False, "DATABASE_TAMPERING_DETECTED: Stored action digest does not match record parameters"
+
+            if expected_action_digest and expected_action_digest != actual_digest:
+                conn.rollback()
+                conn.close()
+                return False, f"DIGEST_MISMATCH: Displayed digest '{expected_action_digest}' does not match record digest '{actual_digest}'"
 
         status = "approved" if approved else "denied"
         audit_hash = log_audit_event(
@@ -660,7 +783,12 @@ def resolve_sentinel_request(
             action=f"sentinel_request_{status}",
             target=row["target"],
             result=status,
-            details={"request_id": req_id, "risk_level": row["risk_level"], "role": resolver_role},
+            details={
+                "request_id": req_id, 
+                "risk_level": row["risk_level"], 
+                "role": resolver_role,
+                "action_digest": expected_action_digest or (row["action_digest"] if "action_digest" in row.keys() else "")
+            },
             db_path=db_path,
             conn=conn
         )

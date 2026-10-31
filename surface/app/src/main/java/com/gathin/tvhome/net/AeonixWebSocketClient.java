@@ -11,13 +11,27 @@ import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
 
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Ultra-Lightweight Sovereign WebSocket Client (<100KB RAM overhead)
@@ -29,6 +43,89 @@ public class AeonixWebSocketClient {
     private static final String DEFAULT_HOST = "10.116.23.168";
     private static final int DEFAULT_PORT = 8080;
     private static final String SERVICE_TYPE = "_aeonix._tcp.";
+
+    public String loadProvisionedToken() {
+        try {
+            File authFile = new File(context.getFilesDir(), "auth/glass_token.json");
+            if (authFile.exists() && authFile.canRead()) {
+                byte[] data = new byte[(int) authFile.length()];
+                try (FileInputStream fis = new FileInputStream(authFile)) {
+                    int read = fis.read(data);
+                    if (read > 0) {
+                        JSONObject obj = new JSONObject(new String(data, 0, read, StandardCharsets.UTF_8));
+                        return obj.optString("token", "").trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to load provisioned token: " + e.getMessage());
+        }
+        return "";
+    }
+
+    public String loadPinnedFingerprint() {
+        try {
+            File pinFile = new File(context.getFilesDir(), "auth/cert_pin.json");
+            if (pinFile.exists() && pinFile.canRead()) {
+                byte[] data = new byte[(int) pinFile.length()];
+                try (FileInputStream fis = new FileInputStream(pinFile)) {
+                    int read = fis.read(data);
+                    if (read > 0) {
+                        JSONObject obj = new JSONObject(new String(data, 0, read, StandardCharsets.UTF_8));
+                        return obj.optString("sha256_fingerprint", "").trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to load pinned certificate fingerprint: " + e.getMessage());
+        }
+        return "";
+    }
+
+    private SSLSocketFactory getPinnedSSLSocketFactory(String expectedFingerprint) throws Exception {
+        TrustManager[] trustManagers = new TrustManager[]{
+            new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                    if (chain == null || chain.length == 0) {
+                        throw new CertificateException("Empty certificate chain");
+                    }
+                    X509Certificate cert = chain[0];
+                    try {
+                        MessageDigest md = MessageDigest.getInstance("SHA-256");
+                        byte[] der = cert.getEncoded();
+                        byte[] digest = md.digest(der);
+                        StringBuilder sb = new StringBuilder();
+                        for (byte b : digest) {
+                            sb.append(String.format("%02X", b));
+                        }
+                        String actualFingerprint = sb.toString();
+                        if (expectedFingerprint != null && !expectedFingerprint.isEmpty()) {
+                            String cleanExpected = expectedFingerprint.replaceAll("[:\\s]", "").toUpperCase();
+                            if (!actualFingerprint.equalsIgnoreCase(cleanExpected)) {
+                                throw new CertificateException("Certificate pin mismatch! Expected " + cleanExpected + " but got " + actualFingerprint);
+                            }
+                        }
+                    } catch (Exception e) {
+                        if (e instanceof CertificateException) throw (CertificateException) e;
+                        throw new CertificateException("Error verifying certificate fingerprint", e);
+                    }
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            }
+        };
+
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, trustManagers, new SecureRandom());
+        return sslContext.getSocketFactory();
+    }
 
     public interface Listener {
         void onConnected();
@@ -163,8 +260,14 @@ public class AeonixWebSocketClient {
 
                 audioRecord.startRecording();
                 byte[] audioBuf = new byte[2048];
+                long recordStartTime = System.currentTimeMillis();
+                long maxRecordingDurationMs = 15000; // Hard bounded at 15 seconds to prevent runaway buffering
 
                 while (isRecording.get()) {
+                    if (System.currentTimeMillis() - recordStartTime > maxRecordingDurationMs) {
+                        Log.w(TAG, "Audio recording hit 15s safety duration ceiling. Terminating stream.");
+                        break;
+                    }
                     int read = audioRecord.read(audioBuf, 0, audioBuf.length);
                     if (read > 0) {
                         byte[] chunk = new byte[read];
@@ -220,14 +323,31 @@ public class AeonixWebSocketClient {
     }
 
     private void connectAndListen() throws Exception {
-        socket = new Socket();
-        socket.connect(new InetSocketAddress(targetHost, targetPort), 5000);
-        socket.setTcpNoDelay(true);
+        String pinnedFp = loadPinnedFingerprint();
+        if (!pinnedFp.isEmpty() || targetPort == 8443) {
+            Log.i(TAG, "Initiating Sovereign TLS Handshake with certificate pinning");
+            SSLSocketFactory sslFactory = getPinnedSSLSocketFactory(pinnedFp);
+            SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
+            sslSocket.connect(new InetSocketAddress(targetHost, targetPort), 5000);
+            sslSocket.setTcpNoDelay(true);
+            sslSocket.startHandshake();
+            socket = sslSocket;
+        } else {
+            socket = new Socket();
+            socket.connect(new InetSocketAddress(targetHost, targetPort), 5000);
+            socket.setTcpNoDelay(true);
+        }
 
         InputStream in = socket.getInputStream();
         outStream = socket.getOutputStream();
 
-        // Perform RFC 6455 Handshake
+        // Load provisioned token from secure app storage
+        String token = loadProvisionedToken();
+        if (token.isEmpty()) {
+            throw new IllegalStateException("NO_PROVISIONED_CREDENTIAL: Glass terminal token not found in app storage");
+        }
+
+        // Perform RFC 6455 Handshake with header-based authorization
         byte[] nonce = new byte[16];
         new SecureRandom().nextBytes(nonce);
         String secKey = Base64.encodeToString(nonce, Base64.NO_WRAP);
@@ -236,6 +356,7 @@ public class AeonixWebSocketClient {
                 "Host: " + targetHost + ":" + targetPort + "\r\n" +
                 "Upgrade: websocket\r\n" +
                 "Connection: Upgrade\r\n" +
+                "Authorization: Bearer " + token + "\r\n" +
                 "Sec-WebSocket-Key: " + secKey + "\r\n" +
                 "Sec-WebSocket-Version: 13\r\n\r\n";
 
