@@ -13,7 +13,7 @@
 
 | Repository | Branch | Full 40-Character Git Commit SHA | Scope of Changes |
 |---|---|---|---|
-| [`aditya0kmr/aeonix-prism`](https://github.com/aditya0kmr/aeonix-prism) | `main` | `d0bdb0be621be5bfa5e46ab378d56ca6f024b485` | Continuous SQLite restore quiescence, pre-import test environment isolation refusing production paths, test outcome reconciliation & nonzero exit, machine-generated test inventory, dirty diff digest recording, 3-tier verifiable reset invalidation. |
+| [`aditya0kmr/aeonix-prism`](https://github.com/aditya0kmr/aeonix-prism) | `main` | `47700212720d02328ce97df28487de73e0f5fe23` | Continuous SQLite restore quiescence, pre-import test environment isolation refusing production paths, test outcome reconciliation & nonzero exit, machine-generated test inventory, dirty diff digest recording, 3-tier verifiable reset invalidation. |
 | [`aditya0kmr/cleanyourtv`](https://github.com/aditya0kmr/cleanyourtv) | `feature/cleanyourtv-hybrid-base` | `6567d261f2826eebd042193a558c143892cc97fb` | Pinned `SSLSocketFactory` with mandatory certificate fingerprint validation; plaintext socket fallback eliminated; empty-pin fallback prohibited; native Android JUnit tests for TLS pin verification. |
 
 ---
