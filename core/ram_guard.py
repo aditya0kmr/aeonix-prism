@@ -46,3 +46,5 @@ def check_ram_guard(threshold_kb: int = 800000) -> Dict[str, Any]:
         "child_processes": child_count,
         "process_limit_ok": child_count < 24
     }
+
+get_ram_status = check_ram_guard

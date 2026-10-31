@@ -49,24 +49,53 @@ flowchart LR
 
 ```
 ~/aeonix/
+├── agents/              # Autonomous Multi-Agent System (Sentinel Gated)
+│   ├── base_agent.py    # Foundational agent class with permissioning & audit logging
+│   ├── navigator.py     # Mission strategy & phased plan decomposition
+│   ├── collector.py     # Lawful data collection & active probe Sentinel hold
+│   ├── analyst.py       # Entity relationship correlation & Nexus graph linking
+│   ├── skeptic.py       # Adversarial claim challenger & counter-hypotheses
+│   ├── legal_guard.py   # Scope, consent & privacy boundary enforcer (Black-class blocks)
+│   ├── forensicator.py  # Evidence custodian & SHA-256 hash preservation
+│   ├── defender.py      # Perimeter hardening & network mitigation coordinator
+│   ├── reporter.py      # Intelligence synthesis & Living Surface card formatter
+│   ├── builder.py       # Software engineering, testing & sandboxed deployment
+│   ├── archivist.py     # Memory vault curator & unified timeline indexing
+│   └── orchestrator.py  # Stateful multi-agent workflow coordinator
 ├── core/
+│   ├── aadya.py         # AADYA Eternal Intelligence (Aadi-First Priority Engine)
+│   ├── atlas.py         # Geospatial & situational awareness engine (Open-Meteo)
 │   ├── atlas_watch.py   # Self-healing supervisor daemon (monitors mind, glass & RAM)
 │   ├── backup.py        # Atomic online SQLite backups, tar.gz archiving & recovery key gen
+│   ├── blackbox.py      # Mission Flight Recorder (immutable execution telemetry)
+│   ├── chronos.py       # Time & routine automation engine (morning/night briefings)
+│   ├── chronoscope.py   # Time machine & audit chain replay engine
 │   ├── council.py       # Oracle's Council 4-archetype deliberation & consensus engine
 │   ├── db.py            # SQLite WAL vault, hash-chained audit_log, sentinel queue
 │   ├── discovery.py     # Zeroconf mDNS (_aeonix._tcp.local) broadcaster
-│   ├── fast_path.py     # Sub-millisecond router for weather, sentinel, media, sanctuary, network, council
+│   ├── dreamcatcher.py  # Idea Incubator (cultivates thought fragments into projects)
+│   ├── fast_path.py     # Sub-millisecond router for weather, sentinel, media, sanctuary, council, aadya
 │   ├── forge.py         # Autonomous developer engine, sandboxed execution & git telemetry
+│   ├── forge_mind.py    # Self-extending tool proposer (Sentinel-gated installation)
+│   ├── ghost.py         # Digital Twin of Home & fault injection simulation
 │   ├── guardian.py      # Network perimeter defense & active subnet discovery
+│   ├── identity.py      # Lawful subject intelligence & exposure analysis
 │   ├── llama_runner.py  # Multi-tier dual model LLM runner (0.5B Fast / 1.5B Deep)
-│   ├── memory.py        # AADYA Memory Heart (FTS token search, daily briefing)
+│   ├── lumen.py         # Context & Living Surface display engine (temporal themes)
+│   ├── memory.py        # NOEMA / AADYA Memory Heart (FTS token search, daily briefing)
+│   ├── mimic.py         # Workflow cloning & routine automation engine
 │   ├── morph.py         # MORPH self-evolution engine with strict Sentinel human approval guardrail
+│   ├── nexus_room.py    # Living Interface Universe (celestial visual state mapper)
+│   ├── oracle.py        # Deep Sovereign Research Engine (multi-stage inquiry)
 │   ├── panoptes.py      # Lawful passive OSINT, entity graph & Sentinel-gated probes
+│   ├── paradox.py       # Decision Replay & branching simulation engine ("What if...")
 │   ├── ram_guard.py     # RAM Guard (>800MB threshold, <16 child processes)
 │   ├── sanctuary.py     # Autonomous Sanctuary Mode (One-Touch Emergency Lockdown)
 │   ├── server.py        # Starlette ASGI Daemon with WebSockets and REST APIs
+│   ├── signal.py        # Hidden pattern & latent correlation detector
 │   ├── spectra.py       # Media discovery & curated live IPTV streaming engine
 │   ├── stt.py           # Whisper STT engine with ARM NEON / Dotprod acceleration
+│   ├── trust.py         # POCO Root of Trust, Signed Orders (HMAC-SHA256) & Kill Switch
 │   ├── veritas.py       # Digital forensics vault, cryptographic chain of custody
 │   └── visia.py         # Visual intelligence, document OCR & forensic EXIF extraction
 ├── surface/             # Fire TV Living Surface launcher source (CleanYourTV Leanback)
@@ -76,7 +105,9 @@ flowchart LR
 │   ├── test_phase3.py   # Unit & integration verification test suite for Phase 3
 │   ├── test_phase4.py   # Unit & integration verification test suite for Phase 4
 │   ├── test_phase5.py   # Unit & integration verification test suite for Phase 5
-│   └── test_phase6.py   # Unit & integration verification test suite for Phase 6
+│   ├── test_phase6.py   # Unit & integration verification test suite for Phase 6
+│   ├── test_agents.py   # Unit verification suite for all 11 autonomous agents
+│   └── test_master_system.py # Comprehensive test suite for Master & Part 17 engines
 ├── models/              # (Git-ignored) GGUF & GGML model weights
 └── data/                # (Git-ignored) SQLite WAL databases, backups & forensic evidence
 ```

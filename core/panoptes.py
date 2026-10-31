@@ -254,6 +254,9 @@ def request_active_probe(target: str, port_range: List[int]) -> Dict[str, Any]:
         "message": "Active probe paused at Sentinel Gate. Authorization required on Living Surface."
     }
 
+panoptes_scan = run_passive_osint
+link_entities = add_relation
+
 if __name__ == "__main__":
     print("Testing PANOPTES Passive OSINT on example.com...")
     t0 = time.time()

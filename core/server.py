@@ -1,4 +1,7 @@
+import sys
 import os
+sys.path.insert(0, "/data/data/com.termux/files/home/aeonix")
+sys.path.insert(0, "/data/data/com.termux/files/home")
 import json
 import time
 import asyncio
@@ -674,6 +677,192 @@ async def post_oracle_council(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# =========================================================================
+# Master System Engines: LUMEN, CHRONOS, ORACLE, AADYA, IDENTITY, ATLAS, TRUST & AGENTS
+# =========================================================================
+
+async def get_lumen_surface(request):
+    try:
+        from core.lumen import lumen
+        return JSONResponse({"success": True, "lumen": lumen.compute_living_surface_state()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_chronos_routines(request):
+    try:
+        from core.chronos import chronos
+        return JSONResponse({"success": True, "routines": chronos.list_routines()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_chronos_trigger(request):
+    try:
+        body = await request.json()
+        routine_id = body.get("routine_id", "")
+        from core.chronos import chronos
+        return JSONResponse(chronos.trigger_routine(routine_id))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_oracle_research(request):
+    try:
+        body = await request.json()
+        query = body.get("query", "")
+        from core.oracle import oracle
+        return JSONResponse({"success": True, "research": oracle.conduct_research(query)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_aadya_priority(request):
+    try:
+        body = await request.json()
+        proposal = body.get("proposal", "")
+        from core.aadya import aadya
+        return JSONResponse({"success": True, "evaluation": aadya.evaluate_priority(proposal)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_aadya_radar(request):
+    try:
+        from core.aadya import aadya
+        return JSONResponse({"success": True, "radar": aadya.scan_future_radar()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_aadya_protection(request):
+    try:
+        from core.aadya import aadya
+        return JSONResponse({"success": True, "protection": aadya.protection_check()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_identity_analyze(request):
+    try:
+        body = await request.json()
+        identifier = body.get("identifier", "")
+        from core.identity import identity_engine
+        return JSONResponse(identity_engine.analyze_public_exposure(identifier))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_atlas_summary(request):
+    try:
+        from core.atlas import atlas
+        return JSONResponse({"success": True, "atlas": atlas.get_situational_summary()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_trust_signed_order(request):
+    try:
+        body = await request.json()
+        mission = body.get("mission", "general_mission")
+        scope = body.get("scope", ["vault_read"])
+        from core.trust import trust
+        return JSONResponse({"success": True, "order": trust.generate_signed_order(mission, scope)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_trust_kill_switch(request):
+    try:
+        body = await request.json() if request.headers.get("content-length") else {}
+        action = body.get("action", "engage")
+        from core.trust import trust
+        if action == "engage":
+            return JSONResponse({"success": True, "status": trust.trigger_kill_switch()})
+        else:
+            return JSONResponse({"success": True, "status": trust.reset_kill_switch()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_agents_roster(request):
+    try:
+        from agents.orchestrator import orchestrator
+        return JSONResponse({"success": True, "roster": orchestrator.list_roster()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_agents_dispatch(request):
+    try:
+        body = await request.json()
+        objective = body.get("objective", "")
+        target = body.get("target", "")
+        from agents.orchestrator import orchestrator
+        return JSONResponse(orchestrator.dispatch_mission(objective, target=target))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# =========================================================================
+# Part 17 Advanced Engines Endpoints
+# =========================================================================
+
+async def post_advanced_paradox(request):
+    try:
+        body = await request.json()
+        decision = body.get("decision", "")
+        counterfactual = body.get("counterfactual", "")
+        from core.paradox import paradox
+        return JSONResponse({"success": True, "paradox": paradox.simulate_counterfactual(decision, counterfactual)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_advanced_ghost(request):
+    try:
+        from core.ghost import ghost
+        return JSONResponse({"success": True, "ghost": ghost.get_digital_twin_state()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_advanced_chronoscope(request):
+    try:
+        from core.chronoscope import chronoscope
+        return JSONResponse({"success": True, "replay": chronoscope.replay_audit_chain()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_advanced_dreamcatcher(request):
+    try:
+        body = await request.json()
+        fragment = body.get("fragment", "")
+        from core.dreamcatcher import dreamcatcher
+        return JSONResponse({"success": True, "dreamcatcher": dreamcatcher.incubate_thought(fragment)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_advanced_mimic(request):
+    try:
+        body = await request.json()
+        name = body.get("name", "custom_workflow")
+        steps = body.get("steps", [])
+        from core.mimic import mimic
+        return JSONResponse(mimic.clone_workflow(name, steps))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_advanced_signal(request):
+    try:
+        from core.signal import signal_detector
+        return JSONResponse({"success": True, "signal": signal_detector.scan_for_latent_patterns()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_advanced_forge_mind(request):
+    try:
+        body = await request.json()
+        tool_name = body.get("tool_name", "")
+        purpose = body.get("purpose", "")
+        code = body.get("code", "")
+        from core.forge_mind import forge_mind
+        return JSONResponse(forge_mind.propose_new_tool(tool_name, purpose, code))
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_advanced_nexus_room(request):
+    try:
+        from core.nexus_room import nexus_room
+        return JSONResponse({"success": True, "nexus_room": nexus_room.render_celestial_topology()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 app = Starlette(
     routes=[
         Route("/api/status", get_status, methods=["GET"]),
@@ -711,6 +900,27 @@ app = Starlette(
         Route("/api/morph/proposals", get_morph_proposals_endpoint, methods=["GET"]),
         Route("/api/morph/propose", post_morph_propose, methods=["POST"]),
         Route("/api/oracle/council", post_oracle_council, methods=["POST"]),
+        Route("/api/lumen/surface", get_lumen_surface, methods=["GET"]),
+        Route("/api/chronos/routines", get_chronos_routines, methods=["GET"]),
+        Route("/api/chronos/trigger", post_chronos_trigger, methods=["POST"]),
+        Route("/api/oracle/research", post_oracle_research, methods=["POST"]),
+        Route("/api/aadya/priority", post_aadya_priority, methods=["POST"]),
+        Route("/api/aadya/radar", get_aadya_radar, methods=["GET"]),
+        Route("/api/aadya/protection", get_aadya_protection, methods=["GET"]),
+        Route("/api/identity/analyze", post_identity_analyze, methods=["POST"]),
+        Route("/api/atlas/summary", get_atlas_summary, methods=["GET"]),
+        Route("/api/trust/signed-order", post_trust_signed_order, methods=["POST"]),
+        Route("/api/trust/kill-switch", post_trust_kill_switch, methods=["POST"]),
+        Route("/api/agents/roster", get_agents_roster, methods=["GET"]),
+        Route("/api/agents/dispatch", post_agents_dispatch, methods=["POST"]),
+        Route("/api/advanced/paradox", post_advanced_paradox, methods=["POST"]),
+        Route("/api/advanced/ghost", get_advanced_ghost, methods=["GET"]),
+        Route("/api/advanced/chronoscope", get_advanced_chronoscope, methods=["GET"]),
+        Route("/api/advanced/dreamcatcher", post_advanced_dreamcatcher, methods=["POST"]),
+        Route("/api/advanced/mimic", post_advanced_mimic, methods=["POST"]),
+        Route("/api/advanced/signal", get_advanced_signal, methods=["GET"]),
+        Route("/api/advanced/forge-mind", post_advanced_forge_mind, methods=["POST"]),
+        Route("/api/advanced/nexus-room", get_advanced_nexus_room, methods=["GET"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     lifespan=lifespan

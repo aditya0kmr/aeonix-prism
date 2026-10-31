@@ -202,8 +202,10 @@ def log_audit_event(actor: str, action: str, target: str, result: str, details: 
     conn.close()
     return current_hash
 
-def queue_sentinel_request(agent: str, action_class: str, action_type: str, target: str, scope: Dict[str, Any], risk_level: str, ttl_seconds: int = 300, db_path: str = DB_PATH) -> str:
+def queue_sentinel_request(agent: str, action_class: str, action_type: str, target: str, scope: Dict[str, Any], risk_level: str, ttl_seconds: int = 300, db_path: str = DB_PATH, timeout_seconds: Optional[int] = None) -> str:
     """Enqueues a pending action for human verification (Sentinel Gate)."""
+    if timeout_seconds is not None:
+        ttl_seconds = int(timeout_seconds)
     conn = get_connection(db_path)
     cur = conn.cursor()
     
@@ -229,6 +231,25 @@ def queue_sentinel_request(agent: str, action_class: str, action_type: str, targ
         db_path=db_path
     )
     return req_id
+
+create_sentinel_request = queue_sentinel_request
+
+def query_db(query: str, args: tuple = (), db_path: str = DB_PATH) -> list:
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute(query, args)
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+def execute_db(query: str, args: tuple = (), db_path: str = DB_PATH) -> int:
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute(query, args)
+    conn.commit()
+    lastrowid = cur.lastrowid
+    conn.close()
+    return lastrowid
 
 def resolve_sentinel_request(req_id: str, approved: bool, resolver: str = "Aadi", db_path: str = DB_PATH) -> bool:
     """Resolves a pending Sentinel request (Approved or Denied)."""

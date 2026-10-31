@@ -208,3 +208,6 @@ def get_git_telemetry(repo_dir: str = "/data/data/com.termux/files/home/aeonix")
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+draft_command = draft_command_from_prompt
+get_git_status = get_git_telemetry

@@ -87,6 +87,30 @@ COMMAND_TRIGGERS = {
     ],
     "oracle_council": [
         "convene council", "council debate", "oracle council", "ask council"
+    ],
+    "aadya_priority": [
+        "aadya", "aadya priority", "check aadya", "aadya creed", "aadya radar"
+    ],
+    "lumen_context": [
+        "lumen", "lumen context", "surface context", "context state"
+    ],
+    "chronos_routines": [
+        "chronos", "routines", "scheduled routines", "chronos routines"
+    ],
+    "oracle_research": [
+        "deep research", "oracle research", "investigate topic"
+    ],
+    "nexus_room": [
+        "nexus room", "celestial universe", "star map"
+    ],
+    "ghost_twin": [
+        "digital twin", "ghost twin", "simulate fault"
+    ],
+    "agents_roster": [
+        "agents", "agent roster", "show agents", "roster"
+    ],
+    "signal_patterns": [
+        "signal scan", "hidden patterns", "detect patterns"
     ]
 }
 
@@ -340,6 +364,105 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
         }
         screen = "living_surface"
         extra_data["council"] = council_res
+
+    elif action == "aadya_priority":
+        from core.aadya import aadya
+        aadya_stat = aadya.protection_check()
+        speech = f"AADYA reports: {aadya_stat['threat_level']} threat posture. Safeguards standing by for Aadi."
+        card = {
+            "title": "AADYA // Eternal Intelligence",
+            "content": f"Status: {aadya_stat['threat_level']}\nRAM: {aadya_stat['ram_security']}\nPriority: Aadi's Sovereignty & Betterment",
+            "type": "aadya"
+        }
+        screen = "living_surface"
+        theme = "obsidian_gold"
+        extra_data["aadya"] = aadya_stat
+
+    elif action == "lumen_context":
+        from core.lumen import lumen
+        lumen_stat = lumen.compute_living_surface_state()
+        speech = f"LUMEN active period is {lumen_stat['period']}. Theme set to {lumen_stat['theme']}."
+        card = {
+            "title": f"LUMEN Context // {lumen_stat['period'].upper()}",
+            "content": f"Pending Sentinel: {lumen_stat['pending_approvals']}\nActive Tasks: {lumen_stat['active_tasks']}",
+            "type": "context"
+        }
+        screen = "living_surface"
+        theme = lumen_stat["theme"]
+        extra_data["lumen"] = lumen_stat
+
+    elif action == "chronos_routines":
+        from core.chronos import chronos
+        routines = chronos.list_routines()
+        speech = f"CHRONOS managing {len(routines)} scheduled routines."
+        card = {
+            "title": "CHRONOS // Routines",
+            "content": "\n".join([f"• {r['name']} ({r['hour']}:00)" for r in routines]),
+            "type": "schedule"
+        }
+        screen = "command_deck"
+        extra_data["chronos"] = routines
+
+    elif action == "oracle_research":
+        from core.oracle import oracle
+        res = oracle.conduct_research("Sovereign Intelligence Architecture")
+        speech = "ORACLE research complete with high confidence across local vault."
+        card = {
+            "title": "ORACLE Research",
+            "content": f"Confidence: {res['confidence'] * 100}%\nSources: {len(res['sources'])} vault records",
+            "type": "research"
+        }
+        screen = "focus"
+        extra_data["oracle"] = res
+
+    elif action == "nexus_room":
+        from core.nexus_room import nexus_room
+        topology = nexus_room.render_celestial_topology()
+        speech = "NEXUS ROOM celestial topology synthesized for Living Surface."
+        card = {
+            "title": "NEXUS Celestial Universe",
+            "content": f"Nodes: {len(topology['celestial_nodes'])}\nBeacons: {len(topology['agent_beacons'])}",
+            "type": "universe"
+        }
+        screen = "nexus_room"
+        theme = "obsidian_purple"
+        extra_data["nexus_room"] = topology
+
+    elif action == "ghost_twin":
+        from core.ghost import ghost
+        twin = ghost.get_digital_twin_state()
+        speech = f"GHOST Digital Twin reports resilience score of {twin['resilience_score'] * 100} percent."
+        card = {
+            "title": "GHOST Digital Twin",
+            "content": f"Mesh: {twin['mesh_name']}\nDevices: {len(twin['virtual_devices'])}\nScore: {twin['resilience_score']}",
+            "type": "digital_twin"
+        }
+        screen = "command_deck"
+        extra_data["ghost"] = twin
+
+    elif action == "agents_roster":
+        from agents.orchestrator import orchestrator
+        roster = orchestrator.list_roster()
+        speech = f"Orchestrator has {len(roster)} sovereign agents standing by."
+        card = {
+            "title": "Autonomous Agent Roster",
+            "content": "\n".join([f"• {a['name']} ({a['role'][:20]}...)" for a in roster[:4]]),
+            "type": "agents"
+        }
+        screen = "command_deck"
+        extra_data["agents"] = roster
+
+    elif action == "signal_patterns":
+        from core.signal import signal_detector
+        sig = signal_detector.scan_for_latent_patterns()
+        speech = "SIGNAL scan completed across vault audit log and entity graph."
+        card = {
+            "title": "SIGNAL Pattern Scan",
+            "content": f"Status: {sig['signal_status']}\nAnomaly Score: {sig['anomaly_score']}",
+            "type": "signal"
+        }
+        screen = "command_deck"
+        extra_data["signal"] = sig
 
     elif action == "mode_sanctuary":
         from aeonix.core.sanctuary import engage_sanctuary

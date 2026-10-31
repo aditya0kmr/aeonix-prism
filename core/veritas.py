@@ -210,6 +210,8 @@ def generate_case_manifest(case_id: str) -> Dict[str, Any]:
         "evidence_items": items
     }
 
+get_case_manifest = generate_case_manifest
+
 if __name__ == "__main__":
     import tempfile
     print("Testing VERITAS Forensics Vault...")
