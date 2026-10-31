@@ -445,16 +445,18 @@ def restore_vault_backup(
             manifest = json.load(f)
         extracted_db = os.path.join(restore_dir, manifest.get("db_file", "aeonix_vault.db"))
 
-        # Safety rollback copy of current target DB if it exists
+        # Ensure any open connections are checkpointed cleanly before replacement
         if os.path.exists(target_db_path):
+            try:
+                temp_c = sqlite3.connect(target_db_path, timeout=3.0)
+                temp_c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+                temp_c.close()
+            except Exception:
+                pass
             safety_copy = f"{target_db_path}.safety_{int(time.time())}.bak"
             shutil.copy2(target_db_path, safety_copy)
 
-        # Atomic replacement
-        os.makedirs(os.path.dirname(os.path.abspath(target_db_path)), exist_ok=True)
-        shutil.copy2(extracted_db, target_db_path)
-
-        # Also remove any lingering -wal or -shm files from old target DB
+        # Clean lingering WAL/SHM before atomic file replacement
         for suffix in ["-wal", "-shm"]:
             wal_file = f"{target_db_path}{suffix}"
             if os.path.exists(wal_file):
@@ -462,6 +464,12 @@ def restore_vault_backup(
                     os.remove(wal_file)
                 except Exception:
                     pass
+
+        # Atomic replacement via temporary file and os.replace
+        os.makedirs(os.path.dirname(os.path.abspath(target_db_path)), exist_ok=True)
+        temp_restoring = f"{target_db_path}.tmp_restoring"
+        shutil.copy2(extracted_db, temp_restoring)
+        os.replace(temp_restoring, target_db_path)
 
         # Post-restore verification check on active target DB
         post_check = verify_audit_chain(target_db_path)

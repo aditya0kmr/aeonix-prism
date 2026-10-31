@@ -13,7 +13,8 @@ from typing import Dict, Any, List, Optional
 from aeonix.core.db import (
     log_audit_event, 
     queue_sentinel_request, 
-    check_sentinel_authorization
+    check_sentinel_authorization,
+    consume_sentinel_authorization
 )
 from aeonix.core.trust import trust
 from aeonix.core.sanctuary import is_sanctuary_active
@@ -233,8 +234,14 @@ def execute_typed_operation(
                 "message": f"Consequential operation '{operation_name}' halted at Sentinel Gate. Approval required on POCO Core Mind."
             }
 
-        # Check authorization state immediately before execution
-        is_auth, req_data, auth_reason = check_sentinel_authorization(sentinel_request_id)
+        # Atomically verify and consume authorization: binds to this single execution
+        expected_target = f"{op['binary']} {operation_name}"
+        expected_action = f"TYPED_OP_{operation_name.upper()}"
+        is_auth, req_data, auth_reason = consume_sentinel_authorization(
+            sentinel_request_id,
+            expected_target=expected_target,
+            expected_action=expected_action
+        )
         if not is_auth:
             return {
                 "success": False,
@@ -255,6 +262,14 @@ def execute_typed_operation(
                     "error": f"ILLEGAL_ARGUMENT: Shell metacharacters are prohibited: {clean_arg}",
                     "status": "denied"
                 }
+            if operation_name == "file_remove":
+                base_name = os.path.basename(clean_arg)
+                if base_name in [".git", ".ssh", "aeonix_vault.db", "vault.db", "models", "bin", "data"]:
+                    return {
+                        "success": False,
+                        "error": f"PROTECTED_RESOURCE: Removal of critical system artifact '{base_name}' is strictly prohibited.",
+                        "status": "denied"
+                    }
             arg_list.append(clean_arg)
 
     t0 = time.perf_counter()

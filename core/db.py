@@ -405,6 +405,82 @@ def check_sentinel_authorization(req_id: str, db_path: str = DB_PATH) -> Tuple[b
 
     return True, req_dict, "AUTHORIZED"
 
+def consume_sentinel_authorization(
+    req_id: str,
+    expected_target: Optional[str] = None,
+    expected_action: Optional[str] = None,
+    db_path: str = DB_PATH
+) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    """
+    Atomically verifies and consumes an approved Sentinel authorization order.
+    Mandates:
+    - Must be in 'approved' state.
+    - Must not be expired.
+    - If expected_target is specified, must match row['target'].
+    - If expected_action is specified, must match row['action_type'] or row['action_class'].
+    - Atomically transitions status to 'executed'.
+    - Single-use only: Rejects any replay or reuse attempt with ALREADY_CONSUMED.
+    Returns (is_consumed: bool, request_dict: Optional[dict], reason: str).
+    """
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    now = time.time()
+    try:
+        cur.execute("BEGIN IMMEDIATE;")
+        cur.execute("SELECT * FROM sentinel_requests WHERE id = ?;", (req_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.rollback()
+            conn.close()
+            return False, None, "REQUEST_NOT_FOUND"
+
+        req_dict = dict(row)
+        if req_dict["status"] == "executed":
+            conn.rollback()
+            conn.close()
+            return False, req_dict, "ALREADY_CONSUMED: Sentinel authorization has already been executed"
+
+        if req_dict["status"] != "approved":
+            conn.rollback()
+            conn.close()
+            return False, req_dict, f"NOT_APPROVED: Current status is '{req_dict['status']}'"
+
+        if now > req_dict["expires_at"]:
+            cur.execute("UPDATE sentinel_requests SET status = 'expired' WHERE id = ?;", (req_id,))
+            conn.commit()
+            conn.close()
+            return False, req_dict, "AUTHORIZATION_EXPIRED: TTL has elapsed"
+
+        if expected_target and req_dict["target"] != expected_target:
+            conn.rollback()
+            conn.close()
+            return False, req_dict, f"TARGET_MISMATCH: Expected '{expected_target}', got '{req_dict['target']}'"
+
+        if expected_action and expected_action not in (req_dict["action_type"], req_dict["action_class"]):
+            conn.rollback()
+            conn.close()
+            return False, req_dict, f"ACTION_MISMATCH: Expected '{expected_action}', got '{req_dict['action_type']}'"
+
+        # Atomically consume authorization
+        cur.execute("UPDATE sentinel_requests SET status = 'executed' WHERE id = ?;", (req_id,))
+        log_audit_event(
+            actor="SENTINEL_GATE",
+            action="authorization_consumed",
+            target=req_dict["target"],
+            result="executed",
+            details={"request_id": req_id, "action_type": req_dict["action_type"], "consumed_at": now},
+            db_path=db_path,
+            conn=conn
+        )
+        conn.commit()
+        conn.close()
+        req_dict["status"] = "executed"
+        return True, req_dict, "CONSUMED_SUCCESS"
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return False, None, f"DATABASE_ERROR: {str(e)}"
+
 def resolve_sentinel_request(
     req_id: str, 
     approved: bool, 

@@ -456,7 +456,10 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
         extra_data["agents"] = roster
 
     elif action == "signal_patterns":
-        from core.signal import signal_detector
+        try:
+            from aeonix.core.signal_detector import signal_detector
+        except ImportError:
+            from core.signal_detector import signal_detector
         sig = signal_detector.scan_for_latent_patterns()
         speech = "SIGNAL scan completed across vault audit log and entity graph."
         card = {

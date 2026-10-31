@@ -151,24 +151,25 @@ sequenceDiagram
     participant DB as SQLite WAL
     participant Model as Local llama.cpp
 
-    TV->>Core: mDNS Discovery (_aeonix._tcp.local)
+    TV->>Core: mDNS Discovery / Static Lease Resolution
     TV->>Core: Establish WebSocket Connection (5s Heartbeat)
     Aadi->>TV: Push-to-Talk (Hold Remote Mic Button)
-    TV->>Core: Stream Opus Audio Chunk
+    TV->>Core: Stream 16kHz PCM Audio Stream
     Core->>Core: Whisper STT -> Transcribed Text
-    Core->>Model: Run Intent Analysis (Qwen 1.5B / RAM Guard)
-    Model-->>Core: Structured Intent: Sensitive Operation (R3)
-    Core->>DB: Record Action Request & Audit State
-    Core->>TV: Push Sentinel Approval Card JSON
-    TV->>Aadi: Display Approval Card on Screen
-    Aadi->>TV: Click "Approve" on Remote
-    TV->>Core: WebSocket Signed Token Approval
-    Core->>Core: Execute Action & Hash-Chain Audit Log
-    Core->>TV: Send Screen Update (Minimal JSON Layout)
+    Core->>Model: Fast-Path Regex or Qwen 2.5 Inference
+    Model-->>Core: Structured Intent: Consequential Action (R3/R4)
+    Core->>DB: Queue Sentinel Request & Audit Event
+    Core->>TV: Push Sentinel Hold Alert Card
+    TV->>Aadi: Display Sentinel Gate Alert (Focus: DENY SAFE)
+    Note over TV,Core: Fire TV is restricted: CAN ONLY SAFELY DENY/CANCEL
+    Aadi->>Core: POCO Root-of-Trust Touch Approval & HMAC-SHA256 Token
+    Core->>DB: Atomically Consume Authorization & Hash-Chain Audit Log
+    Core->>Core: Execute Action
+    Core->>TV: Push Status Resolution Event & Layout Update
 ```
 
-### SQLite Hardening (Zero Corruption)
-Termux processes can be killed abruptly if the user launches heavy foreground games or camera apps. To guarantee zero database corruption:
+### SQLite Hardening & Disaster Recovery Architecture
+Termux processes can be killed abruptly if the mobile OS reclaims memory. While standard SQLite WAL mode cannot mathematically guarantee "zero corruption" under violent kernel panics, the database is hardened with industry-standard resilience safeguards:
 ```sql
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
@@ -176,6 +177,17 @@ PRAGMA temp_store = MEMORY;
 PRAGMA busy_timeout = 5000;
 PRAGMA integrity_check;
 ```
+* **Active Database:** Unencrypted on local internal storage for raw read/write throughput on Dimensity 810.
+* **Encrypted Cold Vault:** Atomic online snapshot archives (`.enc`) are encrypted using **AES-256-GCM** with PBKDF2 key derivation and SHA-256 checksum verification before storage or export.
+
+### Reconciled Architecture & Transport Specifications (v2.1 Revision Note)
+* **Approval Authority:** Supersedes earlier TV-approval drafts. The Fire TV Glass terminal is strictly restricted to **DENY / CANCEL (SAFE)**. Consequential approvals require cryptographic signing on the **POCO Core Mind**.
+* **Voice Transport:** Fire TV streams **raw 16-bit 16kHz Mono PCM** over WebSocket directly to the POCO Core, eliminating client-side Opus compression/decompression latency on the quad-core MT8695D.
+* **Agent Orchestrator:** Supersedes heavyweight LangGraph dependencies. Coordinated via a single-worker async event loop with heavy executor thread pools to stay strictly below Android's 32 phantom process limit.
+* **Versioned Memory Budgets (Fire TV):**
+  * **Target Baseline (Ambient / Screensaver):** $< 80\text{MB}$ active PSS.
+  * **Peak Ceiling (Full Cinematic Leanback / Media Browsing):** $< 180\text{MB}$ total PSS.
+  * **Hard Constraint:** 0 WebViews, native Leanback Views only.
 
 ---
 

@@ -290,34 +290,32 @@ async def process_intent_pipeline(
 
         return intent_result
 
-    # Tier 1: Local Qwen2.5-0.5B Micro-Prompt via async worker + Lock
-    system_micro_prompt = (
-        "You are AADYA, devoted personal intelligence for Aadi. "
-        "Reply strictly under 35 words. Loyal, concise, sovereign."
-    )
-    messages = [
-        {"role": "system", "content": system_micro_prompt},
-        {"role": "user", "content": clean_query}
-    ]
-
+    # Tier 1: Dispatch through Sovereign Hybrid Router
     loop = asyncio.get_event_loop()
     try:
         async with llm_inference_lock:
-            def _run_llm():
-                text = llama_runner.generate(messages, max_tokens=40, temperature=0.6)
-                llama_runner.stop_server()
-                return text
+            def _run_router():
+                try:
+                    from aeonix.core.router import route_query
+                except ImportError:
+                    from core.router import route_query
+                return route_query(clean_query, actor=actor, allow_external=False, model_tier="fast")
 
-            llm_text = await loop.run_in_executor(heavy_executor, _run_llm)
+            router_res = await loop.run_in_executor(heavy_executor, _run_router)
     except Exception as e:
-        llm_text = None
+        router_res = {
+            "success": False,
+            "error": str(e),
+            "speech": "I am standing by for your directive, Aadi.",
+            "tier": "tier_1_fallback"
+        }
 
-    if not llm_text:
-        llm_text = "I am standing by for your directive, Aadi."
+    llm_text = router_res.get("speech") or "I am standing by for your directive, Aadi."
 
     intent_result = {
-        "success": True,
-        "tier": "Tier 1 (Qwen2.5 Micro-Prompt)",
+        "success": router_res.get("success", True),
+        "tier": router_res.get("tier", "Tier 1 (Qwen2.5 Micro-Prompt)"),
+        "provider": router_res.get("provider", "qwen2.5_fast"),
         "action": "aadya_dialogue",
         "speech": llm_text,
         "query": clean_query,
@@ -342,7 +340,7 @@ async def process_intent_pipeline(
 async def post_intent(request):
     """Processes natural language intent via the unified request pipeline."""
     try:
-        caller, role = get_request_identity(request)
+        auth_role, caller = get_request_identity(request)
         body = await request.json()
         user_query = body.get("query", "").strip()
         actor = body.get("actor", caller)
@@ -350,7 +348,7 @@ async def post_intent(request):
         if not user_query:
             return JSONResponse({"error": "Empty query"}, status_code=400)
 
-        result = await process_intent_pipeline(user_query, actor=actor, actor_role=role)
+        result = await process_intent_pipeline(user_query, actor=actor, actor_role=auth_role)
         return JSONResponse(result)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -1050,7 +1048,10 @@ async def post_advanced_mimic(request):
 
 async def get_advanced_signal(request):
     try:
-        from core.signal import signal_detector
+        try:
+            from aeonix.core.signal_detector import signal_detector
+        except ImportError:
+            from core.signal_detector import signal_detector
         return JSONResponse({"success": True, "signal": signal_detector.scan_for_latent_patterns()})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)

@@ -26,7 +26,7 @@ from aeonix.core.council import convene_council_session
 from aeonix.core.oracle import oracle
 from aeonix.core.ghost import ghost
 from aeonix.core.paradox import paradox
-from aeonix.core.signal import signal_detector
+from aeonix.core.signal_detector import signal_detector
 from aeonix.core.aadya import AadyaIntelligence
 from aeonix.core.nexus_room import nexus_room
 from aeonix.agents.builder import BuilderAgent

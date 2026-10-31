@@ -33,7 +33,10 @@ from core.chronoscope import chronoscope
 from core.dreamcatcher import dreamcatcher
 from core.mimic import mimic
 from core.blackbox import blackbox
-from core.signal import signal_detector
+try:
+    from aeonix.core.signal_detector import signal_detector
+except ImportError:
+    from core.signal_detector import signal_detector
 from core.forge_mind import forge_mind
 from core.nexus_room import nexus_room
 
