@@ -24,6 +24,10 @@ from aeonix.core.llama_runner import llama_runner
 from aeonix.core.fast_path import match_fast_path, execute_fast_path
 from aeonix.core.memory import store_memory, recall_memories, generate_daily_briefing
 from aeonix.core.stt import transcribe_pcm
+from aeonix.core.panoptes import run_passive_osint, get_entity_graph, request_active_probe
+from aeonix.core.veritas import create_case, ingest_evidence, verify_evidence, generate_case_manifest
+from aeonix.core.guardian import get_network_inventory, async_get_network_inventory
+from aeonix.core.atlas_watch import run_supervisor_cycle
 
 # Connected Fire TV and client WebSockets
 active_connections: Set[WebSocket] = set()
@@ -319,6 +323,103 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"[WS Connection Error]: {ws_err}")
         active_connections.discard(websocket)
 
+# PANOPTES Endpoints
+async def post_panoptes_scan(request):
+    try:
+        body = await request.json()
+        action = body.get("action", "passive_osint")
+        if action == "active_probe":
+            target = body.get("target", "10.116.23.1")
+            ports = body.get("ports", [80, 443])
+            res = request_active_probe(target, ports)
+            await broadcast_message({
+                "type": "sentinel_card",
+                "request_id": res["request_id"],
+                "agent": "PANOPTES",
+                "action_type": "ACTIVE_PORT_SCAN",
+                "target": target,
+                "risk_level": "R3_HIGH",
+                "scope": {"ports": ports}
+            })
+            return JSONResponse(res)
+        else:
+            domain = body.get("domain", "example.com")
+            graph = run_passive_osint(domain)
+            return JSONResponse({"success": True, "graph": graph})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_panoptes_graph(request):
+    try:
+        start_id = request.query_params.get("start_id", "")
+        depth = int(request.query_params.get("depth", 2))
+        graph = get_entity_graph(start_id, max_depth=depth)
+        return JSONResponse({"success": True, "graph": graph})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# VERITAS Endpoints
+async def list_veritas_cases(request):
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM cases ORDER BY created_at DESC;")
+        cases = [dict(r) for r in cur.fetchall()]
+        conn.close()
+        return JSONResponse({"success": True, "cases": cases})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_veritas_case(request):
+    try:
+        body = await request.json()
+        title = body.get("title", "Forensic Investigation")
+        description = body.get("description", "")
+        legal_basis = body.get("legal_basis", "Authorized Sovereign Security Audit")
+        cid = create_case(title, description, legal_basis)
+        return JSONResponse({"success": True, "case_id": cid})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_veritas_evidence(request):
+    try:
+        body = await request.json()
+        case_id = body.get("case_id")
+        file_path = body.get("file_path")
+        mime_type = body.get("mime_type", "application/octet-stream")
+        metadata = body.get("metadata", {})
+        if not case_id or not file_path:
+            return JSONResponse({"error": "Missing case_id or file_path"}, status_code=400)
+        res = ingest_evidence(case_id, file_path, mime_type, metadata)
+        return JSONResponse({"success": True, "evidence": res})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_veritas_manifest(request):
+    try:
+        case_id = request.query_params.get("case_id")
+        if not case_id:
+            return JSONResponse({"error": "Missing case_id"}, status_code=400)
+        manifest = generate_case_manifest(case_id)
+        return JSONResponse({"success": True, "manifest": manifest})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# GUARDIAN & ATLAS WATCH Endpoints
+async def get_guardian_network(request):
+    try:
+        inv = await async_get_network_inventory()
+        return JSONResponse({"success": True, "network": inv})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_atlas_health(request):
+    try:
+        rep = run_supervisor_cycle()
+        return JSONResponse({"success": True, "supervisor": rep})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 app = Starlette(
     routes=[
         Route("/api/status", get_status, methods=["GET"]),
@@ -330,6 +431,14 @@ app = Starlette(
         Route("/api/briefing", get_briefing, methods=["GET"]),
         Route("/api/intent", post_intent, methods=["POST"]),
         Route("/api/voice/transcribe", post_voice_transcribe, methods=["POST"]),
+        Route("/api/panoptes/scan", post_panoptes_scan, methods=["POST"]),
+        Route("/api/panoptes/graph", get_panoptes_graph, methods=["GET"]),
+        Route("/api/veritas/cases", list_veritas_cases, methods=["GET"]),
+        Route("/api/veritas/cases", post_veritas_case, methods=["POST"]),
+        Route("/api/veritas/evidence", post_veritas_evidence, methods=["POST"]),
+        Route("/api/veritas/manifest", get_veritas_manifest, methods=["GET"]),
+        Route("/api/guardian/network", get_guardian_network, methods=["GET"]),
+        Route("/api/atlas/health", get_atlas_health, methods=["GET"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     lifespan=lifespan

@@ -130,6 +130,33 @@ def init_database(db_path: str = DB_PATH) -> bool:
         chain_of_custody TEXT NOT NULL,
         FOREIGN KEY(case_id) REFERENCES cases(id)
     );
+
+    -- PANOPTES Entity-Relation Graph
+    CREATE TABLE IF NOT EXISTS entities (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        attributes_json TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS entity_relations (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        relation_type TEXT NOT NULL,
+        confidence REAL DEFAULT 1.0,
+        metadata_json TEXT,
+        created_at REAL NOT NULL,
+        FOREIGN KEY(source_id) REFERENCES entities(id),
+        FOREIGN KEY(target_id) REFERENCES entities(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
+    CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+    CREATE INDEX IF NOT EXISTS idx_rel_source ON entity_relations(source_id);
+    CREATE INDEX IF NOT EXISTS idx_rel_target ON entity_relations(target_id);
     """)
 
     # Seed Sovereign User (Aadi) if not present

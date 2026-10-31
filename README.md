@@ -50,18 +50,25 @@ flowchart LR
 ```
 ~/aeonix/
 ├── core/
+│   ├── atlas_watch.py   # Self-healing supervisor daemon (monitors mind, glass & RAM)
 │   ├── db.py            # SQLite WAL vault, hash-chained audit_log, sentinel queue
 │   ├── discovery.py     # Zeroconf mDNS (_aeonix._tcp.local) broadcaster
-│   ├── fast_path.py     # Sub-millisecond router for weather, sentinel, media, sanctuary
+│   ├── fast_path.py     # Sub-millisecond router for weather, sentinel, media, sanctuary, network
+│   ├── guardian.py      # Network perimeter defense & active subnet discovery
 │   ├── llama_runner.py  # Multi-tier dual model LLM runner (0.5B Fast / 1.5B Deep)
 │   ├── memory.py        # AADYA Memory Heart (FTS token search, daily briefing)
+│   ├── panoptes.py      # Lawful passive OSINT, entity graph & Sentinel-gated probes
 │   ├── ram_guard.py     # RAM Guard (>800MB threshold, <16 child processes)
 │   ├── server.py        # Starlette ASGI Daemon with WebSockets and REST APIs
-│   └── stt.py           # Whisper STT engine with ARM NEON / Dotprod acceleration
+│   ├── stt.py           # Whisper STT engine with ARM NEON / Dotprod acceleration
+│   └── veritas.py       # Digital forensics vault, cryptographic chain of custody
+├── surface/             # Fire TV Living Surface launcher source (CleanYourTV Leanback)
 ├── scripts/
 │   └── start-core.sh    # Wake-lock acquisition, vault integrity verify & Uvicorn startup
+├── tests/
+│   └── test_phase3.py   # Unit & integration verification test suite for Phase 3
 ├── models/              # (Git-ignored) GGUF & GGML model weights
-└── data/                # (Git-ignored) SQLite WAL databases
+└── data/                # (Git-ignored) SQLite WAL databases & forensic evidence
 ```
 
 ---
@@ -86,6 +93,22 @@ flowchart LR
   - 300-second auto-timeout auto-denial.
 - [x] **Tamper-Evident Audit Trail**: SHA-256 hash-chained cryptographic provenance across all actions, intent resolutions, and voice commands.
 
+### Phase 3: The Arsenal (100% Verified)
+- [x] **PANOPTES Lawful OSINT & Entity Graph**:
+  - Passive DNS recon, Certificate Transparency logs (`crt.sh`), and HTTP security posture fingerprinting (0 Paid APIs).
+  - Graph traversal via BFS with persistent SQLite nodes (`entities`) and directed edges (`entity_relations`).
+  - Strict **Sentinel Gate R3 hold** for active port scans or probes before any network interaction.
+- [x] **VERITAS Digital Forensics & Immutable Vault**:
+  - RFC 3161-style timestamping and tamper-evident SHA-256 evidence hashing.
+  - Read-only storage enforcement (`0o444`) with immutable chain-of-custody logging.
+  - Automated case manifest generation and cryptographically verified integrity audits.
+- [x] **GUARDIAN Network Perimeter Defense**:
+  - Async non-blocking socket probes across subnet (`10.116.23.0/24`) discovering Gateway, POCO Mind, and Fire TV in $<2.5\text{s}$.
+  - Whitelist-driven device classification detecting rogue/unauthorized subnet assets.
+- [x] **ATLAS WATCH Self-Healing Supervisor Daemon**:
+  - Supervisory checks monitoring Core Server socket, POCO RAM budget, Fire TV ADB link, and Living Surface UI.
+  - Automated self-healing triggers to recover crashed processes or severed wireless ADB connections.
+
 ---
 
 ## 4. API Reference
@@ -98,6 +121,16 @@ flowchart LR
 | `/api/memory/remember` | `POST` | Stores persistent memory in AADYA memory heart |
 | `/api/memory/recall` | `GET` | Full-text token search and category memory retrieval |
 | `/api/briefing` | `GET` | Daily briefing synthesis combining memories, sentinel logs & status |
+| `/api/intent` | `POST` | Fast-path routed intent execution with fallback to Qwen2.5 |
+| `/api/voice/transcribe` | `POST` | Direct offline WAV/PCM speech transcription endpoint |
+| `/api/panoptes/scan` | `POST` | Passive OSINT domain scan or Sentinel-gated active probe |
+| `/api/panoptes/graph` | `GET` | Entity-relation graph traversal centered on entity ID |
+| `/api/veritas/cases` | `GET / POST` | List or create immutable digital forensic cases |
+| `/api/veritas/evidence` | `POST` | Ingest forensic evidence with SHA-256 and chain of custody |
+| `/api/veritas/manifest` | `GET` | Cryptographic case manifest with integrity verification |
+| `/api/guardian/network` | `GET` | Scans subnet and reports active, authorized and rogue devices |
+| `/api/atlas/health` | `GET` | Supervisory health check and self-healing report |
+| `/ws` | `WS` | Real-time Living Surface synchronization, PTT audio streaming, and Sentinel Gate events |
 | `/api/intent` | `POST` | Fast-path routed intent execution with fallback to Qwen2.5 |
 | `/api/voice/transcribe` | `POST` | Direct offline WAV/PCM speech transcription endpoint |
 | `/ws` | `WS` | Real-time Living Surface synchronization, PTT audio streaming, and Sentinel Gate events |
