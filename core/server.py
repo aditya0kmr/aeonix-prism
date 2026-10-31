@@ -334,17 +334,34 @@ async def websocket_endpoint(websocket: WebSocket):
                         log_audit_event("GLASS_TERMINAL", "voice_command", "whisper_tiny", "ok", {"query": query})
                         
                         # Fast-Path check first (<0.05ms)
-                        fp = match_fast_path(query)
-                        if fp:
-                            reply_text = fp.get("response", "")
-                            intent_type = fp.get("intent", "fast_path")
+                        fast_match = match_fast_path(query)
+                        if fast_match:
+                            action_name, confidence = fast_match
+                            intent_result = execute_fast_path(action_name, actor="Aadi")
+                            reply_text = intent_result.get("speech", "")
+                            intent_type = action_name
+                            
+                            # Broadcast layout intent so Fire TV visual updates
+                            if "media_play" in intent_result:
+                                await broadcast_message({
+                                    "type": "media_play",
+                                    **intent_result["media_play"]
+                                })
+                            elif "layout_intent" in intent_result:
+                                await broadcast_message({
+                                    "type": "layout_intent",
+                                    "action": action_name,
+                                    "speech": reply_text,
+                                    **intent_result["layout_intent"]
+                                })
                         else:
                             # Micro-prompt Qwen2.5-0.5B inference
                             messages = [
                                 {"role": "system", "content": "You are AADYA, sovereign AI for Aadi. Answer concisely in under 30 words."},
                                 {"role": "user", "content": query}
                             ]
-                            reply_text = llama_runner.generate(messages, mode="fast", max_tokens=60) or "Understood, Aadi."
+                            reply_text = llama_runner.generate(messages, max_tokens=40, temperature=0.6) or "Understood, Aadi."
+                            llama_runner.stop_server()
                             intent_type = "deep_query"
                         
                         await websocket.send_text(json.dumps({
