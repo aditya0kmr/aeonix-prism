@@ -192,7 +192,7 @@ def http_fingerprint(target: str, timeout: float = 5.0) -> Dict[str, Any]:
         
     return fingerprint
 
-def run_passive_osint(domain: str) -> Dict[str, Any]:
+def run_passive_osint(domain: str, active_probe: bool = False, **kwargs) -> Dict[str, Any]:
     """Executes full passive OSINT pipeline and populates the entity-relation graph."""
     clean_domain = domain.strip().lower().replace("https://", "").replace("http://", "").split("/")[0]
     

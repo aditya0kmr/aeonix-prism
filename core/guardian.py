@@ -18,23 +18,29 @@ WHITELISTED_DEVICES = {
     "10.116.23.168": {
         "name": "POCO M4 Pro 5G",
         "role": "Core Mind / Sovereign Vault",
-        "authorized": True
+        "authorized": True,
+        "trust_level": "SOVEREIGN_CORE",
+        "mac": "LOCAL"
     },
     "10.116.23.179": {
         "name": "Fire TV Stick Lite",
         "role": "Living Surface / Glass Terminal",
-        "authorized": True
+        "authorized": True,
+        "trust_level": "DUMB_GLASS",
+        "mac": "REMOTE"
     },
     "10.116.23.1": {
         "name": "Local Gateway / Wi-Fi AP",
         "role": "Local Router",
-        "authorized": True
+        "authorized": True,
+        "trust_level": "TRUSTED_GATEWAY",
+        "mac": "GATEWAY"
     }
 }
 
 COMMON_PROBE_PORTS = [5555, 8080, 80, 443, 22]
 
-async def probe_ip_port(ip: str, port: int, timeout: float = 0.2) -> bool:
+async def probe_ip_port(ip: str, port: int, timeout: float = 0.1) -> bool:
     """Probes a specific IP and port via non-blocking TCP connect."""
     try:
         _, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout)
@@ -56,18 +62,15 @@ async def scan_host(ip: str) -> Dict[str, Any]:
             
     is_online = len(open_ports) > 0 or ip in WHITELISTED_DEVICES
     
-    hostname = "Unknown"
-    if is_online:
-        try:
-            hostname = socket.gethostbyaddr(ip)[0]
-        except Exception:
-            hostname = ip
-            
     auth_info = WHITELISTED_DEVICES.get(ip, {
         "name": "Unidentified Node",
         "role": "Untrusted Subnet Device",
-        "authorized": False
+        "authorized": False,
+        "trust_level": "UNTRUSTED",
+        "mac": "UNKNOWN"
     })
+    
+    hostname = auth_info.get("name", ip)
     
     return {
         "ip": ip,
@@ -76,6 +79,8 @@ async def scan_host(ip: str) -> Dict[str, Any]:
         "name": auth_info["name"],
         "role": auth_info["role"],
         "authorized": auth_info["authorized"],
+        "trust_level": auth_info.get("trust_level", "AUTHORIZED" if auth_info.get("authorized") else "UNTRUSTED"),
+        "mac": auth_info.get("mac", "UNKNOWN"),
         "open_ports": open_ports,
         "status": "authorized" if auth_info["authorized"] else ("unauthorized_alert" if is_online else "offline")
     }

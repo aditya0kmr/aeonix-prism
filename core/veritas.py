@@ -163,6 +163,7 @@ def verify_evidence(evidence_id: str) -> Dict[str, Any]:
         "expected_sha256": expected_hash,
         "actual_sha256": actual_hash,
         "verified": is_valid,
+        "is_intact": is_valid,
         "status": "intact" if is_valid else "TAMPERED_OR_CORRUPT"
     }
 

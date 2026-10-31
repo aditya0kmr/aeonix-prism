@@ -175,10 +175,14 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
         screen = "command_deck"
 
     elif action == "weather":
-        speech = "Local conditions are 25 degrees, clear skies, humidity 48 percent."
+        from core.atlas import atlas
+        w = atlas.get_weather_intel()
+        temp = w.get("temperature_c", 24)
+        wind = w.get("windspeed_kmh", 8)
+        speech = f"Current temperature is {temp} degrees Celsius with wind at {wind} kilometers per hour."
         card = {
             "title": "Living Environment",
-            "content": "25°C · Clear & Ambient\nHumidity: 48% · Wind: 6 km/h",
+            "content": f"{temp}°C · Ambient\nWind: {wind} km/h · Source: {w.get('source', 'Atlas')}",
             "type": "weather"
         }
         screen = "living_surface"
@@ -256,7 +260,6 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
         screen = "living_surface"
 
     elif action == "cases_status":
-        from aeonix.core.db import get_connection
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("SELECT count(*) as cnt FROM cases WHERE status = 'open';")
