@@ -8,13 +8,17 @@ Zero Cloud Dependencies.
 import os
 import time
 import subprocess
+import tempfile
 from typing import Dict, Any, List, Optional
 
 from aeonix.core.db import (
     log_audit_event, 
     queue_sentinel_request, 
     check_sentinel_authorization,
-    consume_sentinel_authorization
+    consume_sentinel_authorization,
+    claim_sentinel_authorization,
+    complete_sentinel_execution,
+    DB_PATH
 )
 from aeonix.core.trust import trust
 from aeonix.core.sanctuary import is_sanctuary_active
@@ -22,7 +26,8 @@ from aeonix.core.sanctuary import is_sanctuary_active
 # Allowed safe working directories
 ALLOWED_BASE_DIRS = [
     "/data/data/com.termux/files/home/aeonix",
-    "/data/data/com.termux/files/home"
+    "/data/data/com.termux/files/home",
+    tempfile.gettempdir()
 ]
 
 # Typed Operations Catalog
@@ -183,12 +188,15 @@ def execute_typed_operation(
     cwd: Optional[str] = None,
     sentinel_request_id: Optional[str] = None,
     actor: str = "Aadi",
-    actor_role: str = "POCO_CORE"
+    actor_role: str = "POCO_CORE",
+    db_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Executes a typed allowlisted operation WITHOUT shell=True.
     Consequential operations require valid, non-expired Sentinel approval.
     """
+    target_db = db_path or DB_PATH
+
     if trust.is_kill_switch_active():
         return {
             "success": False,
@@ -215,39 +223,45 @@ def execute_typed_operation(
 
     # Consequential Gate
     if op["is_consequential"]:
+        exact_target = f"{op['binary']} {operation_name} {' '.join(str(a) for a in (extra_args or []))}".strip()
+        expected_scope = {"cwd": safe_cwd, "extra_args": extra_args or [], "operation": operation_name}
+
         if not sentinel_request_id:
-            # Enqueue Sentinel request
+            # Enqueue Sentinel request bound to exact target and exact scope
             req_id = queue_sentinel_request(
                 agent="FORGE",
                 action_class="DEVELOPER_EXECUTION",
                 action_type=f"TYPED_OP_{operation_name.upper()}",
-                target=f"{op['binary']} {operation_name}",
-                scope={"cwd": safe_cwd, "extra_args": extra_args or []},
+                target=exact_target,
+                scope=expected_scope,
                 risk_level=op["risk_level"],
-                ttl_seconds=300
+                ttl_seconds=300,
+                db_path=target_db
             )
             return {
                 "success": False,
                 "status": "sentinel_gate_hold",
                 "request_id": req_id,
                 "operation": operation_name,
+                "target": exact_target,
                 "message": f"Consequential operation '{operation_name}' halted at Sentinel Gate. Approval required on POCO Core Mind."
             }
 
-        # Atomically verify and consume authorization: binds to this single execution
-        expected_target = f"{op['binary']} {operation_name}"
+        # Atomically claim authorization: binds to this exact execution AND exact parameters/scope
         expected_action = f"TYPED_OP_{operation_name.upper()}"
-        is_auth, req_data, auth_reason = consume_sentinel_authorization(
+        is_claimed, req_data, claim_reason = claim_sentinel_authorization(
             sentinel_request_id,
-            expected_target=expected_target,
-            expected_action=expected_action
+            expected_target=exact_target,
+            expected_action=expected_action,
+            expected_scope=expected_scope,
+            db_path=target_db
         )
-        if not is_auth:
+        if not is_claimed:
             return {
                 "success": False,
                 "status": "authorization_rejected",
-                "reason": auth_reason,
-                "error": f"Execution rejected: {auth_reason}"
+                "reason": claim_reason,
+                "error": f"Execution rejected: {claim_reason}"
             }
 
     # Construct strict argument list
@@ -265,6 +279,13 @@ def execute_typed_operation(
             if operation_name == "file_remove":
                 base_name = os.path.basename(clean_arg)
                 if base_name in [".git", ".ssh", "aeonix_vault.db", "vault.db", "models", "bin", "data"]:
+                    if sentinel_request_id:
+                        complete_sentinel_execution(
+                            sentinel_request_id,
+                            success=False,
+                            error_msg=f"Protected resource '{base_name}'",
+                            db_path=target_db
+                        )
                     return {
                         "success": False,
                         "error": f"PROTECTED_RESOURCE: Removal of critical system artifact '{base_name}' is strictly prohibited.",
@@ -289,6 +310,16 @@ def execute_typed_operation(
         bounded_output = raw_output[:65536]
         is_truncated = len(raw_output) > 65536
 
+        success = (proc.returncode == 0)
+        if op["is_consequential"] and sentinel_request_id:
+            complete_sentinel_execution(
+                sentinel_request_id,
+                success=success,
+                output_summary=bounded_output[:256],
+                error_msg=proc.stderr if not success else None,
+                db_path=target_db
+            )
+
         log_audit_event(
             actor=f"{actor} ({actor_role})",
             action="forge_typed_executed",
@@ -298,7 +329,8 @@ def execute_typed_operation(
                 "exit_code": proc.returncode,
                 "latency_ms": dt,
                 "truncated": is_truncated
-            }
+            },
+            db_path=target_db
         )
 
         return {
@@ -311,12 +343,16 @@ def execute_typed_operation(
             "latency_ms": dt
         }
     except subprocess.TimeoutExpired:
+        if op["is_consequential"] and sentinel_request_id:
+            complete_sentinel_execution(sentinel_request_id, success=False, error_msg="EXECUTION_TIMEOUT: Operation exceeded 10.0s time limit")
         return {
             "success": False,
             "status": "timeout",
             "error": "EXECUTION_TIMEOUT: Operation exceeded 10.0s time limit"
         }
     except Exception as e:
+        if op["is_consequential"] and sentinel_request_id:
+            complete_sentinel_execution(sentinel_request_id, success=False, error_msg=str(e))
         return {
             "success": False,
             "status": "error",

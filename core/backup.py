@@ -30,6 +30,17 @@ BACKUP_DIR = os.path.expanduser("~/aeonix/data/backups")
 MAX_BACKUP_STORAGE_MB = 1000
 MAX_EXTRACTION_SIZE_BYTES = 250 * 1024 * 1024 # 250MB zip-bomb defense
 
+_maintenance_mode_active = False
+
+def set_maintenance_mode(active: bool):
+    """Enforces system-wide database maintenance lock during disaster recovery."""
+    global _maintenance_mode_active
+    _maintenance_mode_active = active
+
+def is_maintenance_mode() -> bool:
+    """Returns True if database is currently locked in disaster recovery maintenance mode."""
+    return _maintenance_mode_active
+
 
 def ensure_backup_dir():
     os.makedirs(BACKUP_DIR, mode=0o700, exist_ok=True)
@@ -108,7 +119,8 @@ def create_vault_backup(
     actor: str = "Aadi",
     note: str = "Automated Sovereign Snapshot",
     encrypt: bool = True,
-    recovery_passphrase: Optional[str] = None
+    recovery_passphrase: Optional[str] = None,
+    db_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Creates an atomic, verified SQLite WAL backup archive:
@@ -130,7 +142,7 @@ def create_vault_backup(
         db_snapshot_path = os.path.join(work_dir, db_snapshot_name)
 
         # 1. Atomic Online SQLite Backup
-        src_conn = get_connection()
+        src_conn = get_connection(db_path) if db_path else get_connection()
         dst_conn = sqlite3.connect(db_snapshot_path)
         with dst_conn:
             src_conn.backup(dst_conn, pages=100)
@@ -401,19 +413,23 @@ def restore_vault_backup(
     3. Safely extracts and replaces target database file atomically.
     4. Confirms restored database is live and operational.
     """
-    # 1. Pre-restoration verification
-    verify_res = verify_backup(archive_path, recovery_passphrase=recovery_passphrase)
-    if not verify_res.get("is_intact") and not force:
-        return {
-            "success": False,
-            "error": f"RESTORE_BLOCKED: Backup archive failed verification: {verify_res.get('error')}",
-            "verification_details": verify_res
-        }
-
-    t0 = time.perf_counter()
-    restore_dir = tempfile.mkdtemp(prefix="aeonix_restore_")
-
+    # Enforce maintenance mode
+    set_maintenance_mode(True)
+    safety_dir = None
+    restore_dir = None
     try:
+        # Pre-restoration verification
+        verify_res = verify_backup(archive_path, recovery_passphrase=recovery_passphrase)
+        if not verify_res.get("is_intact") and not force:
+            return {
+                "success": False,
+                "error": f"RESTORE_BLOCKED: Backup archive failed verification: {verify_res.get('error')}",
+                "verification_details": verify_res
+            }
+
+        t0 = time.perf_counter()
+        restore_dir = tempfile.mkdtemp(prefix="aeonix_restore_")
+
         # Extract archive
         is_encrypted = archive_path.endswith(".enc")
         if is_encrypted:
@@ -445,16 +461,21 @@ def restore_vault_backup(
             manifest = json.load(f)
         extracted_db = os.path.join(restore_dir, manifest.get("db_file", "aeonix_vault.db"))
 
-        # Ensure any open connections are checkpointed cleanly before replacement
+        # Step 2: Enforce strict WAL checkpoint and comprehensive safety rollback snapshot
         if os.path.exists(target_db_path):
+            temp_c = sqlite3.connect(target_db_path, timeout=5.0)
             try:
-                temp_c = sqlite3.connect(target_db_path, timeout=3.0)
                 temp_c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            finally:
                 temp_c.close()
-            except Exception:
-                pass
-            safety_copy = f"{target_db_path}.safety_{int(time.time())}.bak"
-            shutil.copy2(target_db_path, safety_copy)
+
+            safety_dir = f"{target_db_path}.safety_rollback_{int(time.time())}"
+            os.makedirs(safety_dir, exist_ok=True)
+            shutil.copy2(target_db_path, os.path.join(safety_dir, "vault.db.bak"))
+            for suffix in ["-wal", "-shm"]:
+                wf = f"{target_db_path}{suffix}"
+                if os.path.exists(wf):
+                    shutil.copy2(wf, os.path.join(safety_dir, f"vault{suffix}.bak"))
 
         # Clean lingering WAL/SHM before atomic file replacement
         for suffix in ["-wal", "-shm"]:
@@ -471,8 +492,18 @@ def restore_vault_backup(
         shutil.copy2(extracted_db, temp_restoring)
         os.replace(temp_restoring, target_db_path)
 
-        # Post-restore verification check on active target DB
+        # Step 3: Post-restore verification check on active target DB
         post_check = verify_audit_chain(target_db_path)
+        if not post_check.get("is_valid"):
+            # Automatic Safety Rollback
+            if safety_dir and os.path.exists(os.path.join(safety_dir, "vault.db.bak")):
+                shutil.copy2(os.path.join(safety_dir, "vault.db.bak"), target_db_path)
+            return {
+                "success": False,
+                "status": "RESTORE_FAILED_ROLLED_BACK",
+                "error": "Post-restoration verification failed; target DB was rolled back automatically."
+            }
+
         dt = round((time.perf_counter() - t0) * 1000, 2)
 
         log_audit_event(
@@ -497,7 +528,9 @@ def restore_vault_backup(
             "latency_ms": dt
         }
     finally:
-        shutil.rmtree(restore_dir, ignore_errors=True)
+        set_maintenance_mode(False)
+        if restore_dir and os.path.exists(restore_dir):
+            shutil.rmtree(restore_dir, ignore_errors=True)
 
 
 def list_backups() -> List[Dict[str, Any]]:

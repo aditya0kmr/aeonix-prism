@@ -405,22 +405,24 @@ def check_sentinel_authorization(req_id: str, db_path: str = DB_PATH) -> Tuple[b
 
     return True, req_dict, "AUTHORIZED"
 
-def consume_sentinel_authorization(
+def claim_sentinel_authorization(
     req_id: str,
     expected_target: Optional[str] = None,
     expected_action: Optional[str] = None,
+    expected_scope: Optional[Dict[str, Any]] = None,
     db_path: str = DB_PATH
 ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
     """
-    Atomically verifies and consumes an approved Sentinel authorization order.
-    Mandates:
+    Atomically verifies and claims an approved Sentinel authorization order.
+    Lifecycle: transitions status from 'approved' -> 'claimed'.
+    Validates:
     - Must be in 'approved' state.
     - Must not be expired.
     - If expected_target is specified, must match row['target'].
     - If expected_action is specified, must match row['action_type'] or row['action_class'].
-    - Atomically transitions status to 'executed'.
-    - Single-use only: Rejects any replay or reuse attempt with ALREADY_CONSUMED.
-    Returns (is_consumed: bool, request_dict: Optional[dict], reason: str).
+    - If expected_scope is specified, validates exact scope_json matching (cwd, extra_args).
+    - Single-use only: Rejects replay attempts with ALREADY_CONSUMED.
+    Returns (is_claimed: bool, request_dict: Optional[dict], reason: str).
     """
     conn = get_connection(db_path)
     cur = conn.cursor()
@@ -435,15 +437,16 @@ def consume_sentinel_authorization(
             return False, None, "REQUEST_NOT_FOUND"
 
         req_dict = dict(row)
-        if req_dict["status"] == "executed":
+        current_status = req_dict["status"]
+        if current_status in ("claimed", "completed", "executed", "failed", "indeterminate"):
             conn.rollback()
             conn.close()
-            return False, req_dict, "ALREADY_CONSUMED: Sentinel authorization has already been executed"
+            return False, req_dict, f"ALREADY_CONSUMED: Sentinel authorization has already been {current_status}"
 
-        if req_dict["status"] != "approved":
+        if current_status != "approved":
             conn.rollback()
             conn.close()
-            return False, req_dict, f"NOT_APPROVED: Current status is '{req_dict['status']}'"
+            return False, req_dict, f"NOT_APPROVED: Current status is '{current_status}'"
 
         if now > req_dict["expires_at"]:
             cur.execute("UPDATE sentinel_requests SET status = 'expired' WHERE id = ?;", (req_id,))
@@ -454,32 +457,119 @@ def consume_sentinel_authorization(
         if expected_target and req_dict["target"] != expected_target:
             conn.rollback()
             conn.close()
-            return False, req_dict, f"TARGET_MISMATCH: Expected '{expected_target}', got '{req_dict['target']}'"
+            return False, req_dict, f"TARGET_MISMATCH: Expected target '{expected_target}', got '{req_dict['target']}'"
 
         if expected_action and expected_action not in (req_dict["action_type"], req_dict["action_class"]):
             conn.rollback()
             conn.close()
-            return False, req_dict, f"ACTION_MISMATCH: Expected '{expected_action}', got '{req_dict['action_type']}'"
+            return False, req_dict, f"ACTION_MISMATCH: Expected action '{expected_action}', got '{req_dict['action_type']}'"
 
-        # Atomically consume authorization
-        cur.execute("UPDATE sentinel_requests SET status = 'executed' WHERE id = ?;", (req_id,))
+        if expected_scope is not None:
+            try:
+                stored_scope = json.loads(req_dict["scope_json"])
+                # Compare cwd if specified
+                if "cwd" in expected_scope and stored_scope.get("cwd") != expected_scope["cwd"]:
+                    conn.rollback()
+                    conn.close()
+                    return False, req_dict, f"SCOPE_MISMATCH: Approved working directory '{stored_scope.get('cwd')}' does not match execution directory '{expected_scope['cwd']}'"
+
+                # Compare extra_args if specified
+                if "extra_args" in expected_scope:
+                    approved_args = stored_scope.get("extra_args", [])
+                    exec_args = expected_scope["extra_args"]
+                    if approved_args != exec_args:
+                        conn.rollback()
+                        conn.close()
+                        return False, req_dict, f"SCOPE_MISMATCH: Approved arguments {approved_args} do not match execution arguments {exec_args}"
+            except Exception as e:
+                conn.rollback()
+                conn.close()
+                return False, req_dict, f"SCOPE_PARSE_ERROR: {str(e)}"
+
+        # Atomically transition to 'claimed'
+        cur.execute("UPDATE sentinel_requests SET status = 'claimed' WHERE id = ?;", (req_id,))
         log_audit_event(
             actor="SENTINEL_GATE",
-            action="authorization_consumed",
+            action="authorization_claimed",
             target=req_dict["target"],
-            result="executed",
-            details={"request_id": req_id, "action_type": req_dict["action_type"], "consumed_at": now},
+            result="claimed",
+            details={"request_id": req_id, "action_type": req_dict["action_type"], "claimed_at": now},
             db_path=db_path,
             conn=conn
         )
         conn.commit()
         conn.close()
-        req_dict["status"] = "executed"
-        return True, req_dict, "CONSUMED_SUCCESS"
+        req_dict["status"] = "claimed"
+        return True, req_dict, "CLAIMED_SUCCESS"
     except Exception as e:
         conn.rollback()
         conn.close()
         return False, None, f"DATABASE_ERROR: {str(e)}"
+
+def complete_sentinel_execution(
+    req_id: str,
+    success: bool,
+    output_summary: str = "",
+    error_msg: Optional[str] = None,
+    db_path: str = DB_PATH
+) -> bool:
+    """
+    Finalizes execution lifecycle: transitions status from 'claimed' to 'completed' or 'failed'.
+    """
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    now = time.time()
+    new_status = "completed" if success else "failed"
+    try:
+        cur.execute("BEGIN IMMEDIATE;")
+        cur.execute("SELECT target, action_type FROM sentinel_requests WHERE id = ?;", (req_id,))
+        row = cur.fetchone()
+        target = row[0] if row else "unknown"
+        action = row[1] if row else "unknown"
+
+        cur.execute("UPDATE sentinel_requests SET status = ? WHERE id = ?;", (new_status, req_id))
+        log_audit_event(
+            actor="SENTINEL_GATE",
+            action=f"execution_{new_status}",
+            target=target,
+            result=new_status,
+            details={"request_id": req_id, "action": action, "output": output_summary[:256], "error": error_msg, "completed_at": now},
+            db_path=db_path,
+            conn=conn
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        conn.rollback()
+        conn.close()
+        return False
+
+def consume_sentinel_authorization(
+    req_id: str,
+    expected_target: Optional[str] = None,
+    expected_action: Optional[str] = None,
+    expected_scope: Optional[Dict[str, Any]] = None,
+    db_path: str = DB_PATH
+) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    """
+    Atomically verifies and consumes an approved Sentinel authorization order.
+    Checks target, action, and exact scope parameters.
+    Returns (is_consumed: bool, request_dict: Optional[dict], reason: str).
+    """
+    is_claimed, req_dict, reason = claim_sentinel_authorization(
+        req_id=req_id,
+        expected_target=expected_target,
+        expected_action=expected_action,
+        expected_scope=expected_scope,
+        db_path=db_path
+    )
+    if is_claimed:
+        complete_sentinel_execution(req_id, success=True, output_summary="Consumed via sentinel authorization", db_path=db_path)
+        if req_dict:
+            req_dict["status"] = "completed"
+        return True, req_dict, "CONSUMED_SUCCESS"
+    return False, req_dict, reason
 
 def resolve_sentinel_request(
     req_id: str, 

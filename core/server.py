@@ -66,10 +66,6 @@ def get_request_identity(request) -> Tuple[str, str]:
         if payload:
             return payload.get("role", "UNKNOWN"), payload.get("device_id", "anonymous")
 
-    client_host = getattr(request.client, "host", "") if request.client else ""
-    if client_host in ("127.0.0.1", "localhost", "::1"):
-        return ROLE_POCO_CORE, "poco_local_console"
-
     return "UNAUTHENTICATED", "untrusted"
 
 # Connected Fire TV and client WebSockets
@@ -130,6 +126,9 @@ async def resolve_sentinel(request):
             return JSONResponse({"error": "Field 'approved' must be a strict boolean (true/false)"}, status_code=400)
 
         auth_role, actor = get_request_identity(request)
+        if auth_role == "UNAUTHENTICATED":
+            return JSONResponse({"error": "Missing or invalid authorization header"}, status_code=401)
+
         if approved is True and auth_role != ROLE_POCO_CORE:
             return JSONResponse({
                 "error": "POCO_AUTHORITY_REQUIRED: Approval of consequential actions is restricted strictly to POCO Core Mind"
@@ -367,24 +366,22 @@ async def post_voice_transcribe(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 async def websocket_endpoint(websocket: WebSocket):
-    # Authenticate WebSocket handshake
+    # Authenticate WebSocket handshake - zero implicit loopback or IP trust
     token = websocket.query_params.get("token", "")
-    payload = verify_token(token) if token else None
-    client_host = getattr(websocket.client, "host", "") if websocket.client else ""
+    if not token:
+        auth_header = websocket.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
 
-    if payload:
-        ws_role = payload.get("role", ROLE_FIRETV_GLASS)
-        ws_device = payload.get("device_id", "paired_device")
-    elif client_host in ("127.0.0.1", "localhost", "::1"):
-        ws_role = ROLE_POCO_CORE
-        ws_device = "poco_local"
-    elif client_host == "10.116.23.179": # Known paired Fire TV glass
-        ws_role = ROLE_FIRETV_GLASS
-        ws_device = "firetv_stick_glass"
-    else:
-        # Reject unauthorized foreign IP
-        await websocket.close(code=4003, reason="Unauthorized device")
+    payload = verify_token(token) if token else None
+
+    if not payload:
+        # Strictly reject unauthenticated connections (zero loopback or IP bypass)
+        await websocket.close(code=4401, reason="Unauthorized: Cryptographic bearer token required")
         return
+
+    ws_role = payload.get("role", ROLE_FIRETV_GLASS)
+    ws_device = payload.get("device_id", "paired_device")
 
     await websocket.accept()
     active_connections.add(websocket)
@@ -647,8 +644,14 @@ async def get_sanctuary_status_endpoint(request):
 
 async def post_sanctuary_activate(request):
     try:
+        auth_role, actor = get_request_identity(request)
+        if auth_role == "UNAUTHENTICATED":
+            return JSONResponse({"error": "Missing or invalid authorization header"}, status_code=401)
+        if auth_role != ROLE_POCO_CORE:
+            return JSONResponse({"error": "POCO_AUTHORITY_REQUIRED: Only POCO Core Mind can modify Sanctuary state"}, status_code=403)
+
         body = await request.json() if request.headers.get("content-length") else {}
-        actor = body.get("actor", "Aadi")
+        actor = body.get("actor", actor)
         reason = body.get("reason", "Operator Command")
         res = engage_sanctuary(actor=actor, reason=reason)
         await broadcast_message({
@@ -661,8 +664,14 @@ async def post_sanctuary_activate(request):
 
 async def post_sanctuary_deactivate(request):
     try:
+        auth_role, actor = get_request_identity(request)
+        if auth_role == "UNAUTHENTICATED":
+            return JSONResponse({"error": "Missing or invalid authorization header"}, status_code=401)
+        if auth_role != ROLE_POCO_CORE:
+            return JSONResponse({"error": "POCO_AUTHORITY_REQUIRED: Only POCO Core Mind can modify Sanctuary state"}, status_code=403)
+
         body = await request.json() if request.headers.get("content-length") else {}
-        actor = body.get("actor", "Aadi")
+        actor = body.get("actor", actor)
         res = release_sanctuary(actor=actor)
         await broadcast_message({
             "type": "sanctuary_mode",
@@ -690,8 +699,10 @@ async def post_forge_draft(request):
 async def post_forge_execute(request):
     try:
         auth_role, actor = get_request_identity(request)
+        if auth_role == "UNAUTHENTICATED":
+            return JSONResponse({"error": "Missing or invalid authorization header"}, status_code=401)
         if auth_role not in (ROLE_POCO_CORE, ROLE_AGENT_EXECUTOR):
-            return JSONResponse({"error": "UNAUTHORIZED: Execution requires POCO_CORE or AGENT_EXECUTOR role"}, status_code=403)
+            return JSONResponse({"error": "FORBIDDEN: Execution requires POCO_CORE or AGENT_EXECUTOR role"}, status_code=403)
 
         body = await request.json()
         op_name = body.get("operation") or body.get("command", "")
