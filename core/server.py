@@ -32,6 +32,9 @@ from aeonix.core.spectra import get_channel_catalog, get_current_playback, set_p
 from aeonix.core.sanctuary import engage_sanctuary, release_sanctuary, get_sanctuary_status, is_sanctuary_active
 from aeonix.core.forge import draft_command_from_prompt, execute_sandboxed_command, get_git_telemetry
 from aeonix.core.visia import analyze_visual_artifact
+from aeonix.core.backup import create_vault_backup, list_backups, verify_backup, generate_emergency_recovery_key
+from aeonix.core.morph import get_pending_proposals, generate_optimization_proposal
+from aeonix.core.council import convene_council_session
 
 # Connected Fire TV and client WebSockets
 active_connections: Set[WebSocket] = set()
@@ -594,6 +597,83 @@ async def post_visia_analyze(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+# =========================================================================
+# Phase 6: Vault Backup, MORPH Evolution & Oracle's Council Endpoints
+# =========================================================================
+
+async def post_backup_create(request):
+    try:
+        body = await request.json() if request.headers.get("content-length") else {}
+        actor = body.get("actor", "Aadi")
+        note = body.get("note", "Operator Backup")
+        res = create_vault_backup(actor=actor, note=note)
+        return JSONResponse({"success": True, "backup": res})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_backup_list(request):
+    try:
+        backups = list_backups()
+        return JSONResponse({"success": True, "backups": backups})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_backup_verify(request):
+    try:
+        body = await request.json()
+        path = body.get("file_path")
+        if not path or not os.path.exists(path):
+            return JSONResponse({"error": f"Backup file not found: {path}"}, status_code=400)
+        res = verify_backup(path)
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_recovery_key(request):
+    try:
+        key_data = generate_emergency_recovery_key()
+        return JSONResponse({"success": True, "recovery": key_data})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_morph_proposals_endpoint(request):
+    try:
+        proposals = get_pending_proposals()
+        return JSONResponse({"success": True, "proposals": proposals})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_morph_propose(request):
+    try:
+        body = await request.json() if request.headers.get("content-length") else {}
+        actor = body.get("actor", "Aadi")
+        res = generate_optimization_proposal(actor=actor)
+        if res.get("sentinel_request_id"):
+            await broadcast_message({
+                "type": "sentinel_card",
+                "request_id": res["sentinel_request_id"],
+                "agent": "MORPH",
+                "action_type": "SYSTEM_OPTIMIZATION",
+                "target": res["title"],
+                "risk_level": "R1_LOW",
+                "scope": {"description": res["description"]}
+            })
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_oracle_council(request):
+    try:
+        body = await request.json()
+        query = body.get("query", "")
+        actor = body.get("actor", "Aadi")
+        if not query:
+            return JSONResponse({"error": "Missing query"}, status_code=400)
+        council_res = convene_council_session(query=query, actor=actor)
+        return JSONResponse(council_res)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 app = Starlette(
     routes=[
         Route("/api/status", get_status, methods=["GET"]),
@@ -624,6 +704,13 @@ app = Starlette(
         Route("/api/forge/execute", post_forge_execute, methods=["POST"]),
         Route("/api/forge/git", get_forge_git, methods=["GET"]),
         Route("/api/visia/analyze", post_visia_analyze, methods=["POST"]),
+        Route("/api/backup/create", post_backup_create, methods=["POST"]),
+        Route("/api/backup/list", get_backup_list, methods=["GET"]),
+        Route("/api/backup/verify", post_backup_verify, methods=["POST"]),
+        Route("/api/backup/recovery-key", get_recovery_key, methods=["GET"]),
+        Route("/api/morph/proposals", get_morph_proposals_endpoint, methods=["GET"]),
+        Route("/api/morph/propose", post_morph_propose, methods=["POST"]),
+        Route("/api/oracle/council", post_oracle_council, methods=["POST"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     lifespan=lifespan

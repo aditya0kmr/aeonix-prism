@@ -75,6 +75,18 @@ COMMAND_TRIGGERS = {
     ],
     "forge_status": [
         "developer status", "forge status", "developer deck"
+    ],
+    "create_backup": [
+        "create backup", "backup vault", "snapshot database", "run backup"
+    ],
+    "backup_status": [
+        "backup status", "list backups", "show backups", "vault backups"
+    ],
+    "morph_status": [
+        "morph status", "system proposals", "optimization proposals", "evolution proposals"
+    ],
+    "oracle_council": [
+        "convene council", "council debate", "oracle council", "ask council"
     ]
 }
 
@@ -278,6 +290,56 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
         }
         screen = "focus"
         extra_data["git"] = git_info
+
+    elif action == "create_backup":
+        from aeonix.core.backup import create_vault_backup
+        res = create_vault_backup(actor=actor)
+        speech = f"Vault snapshot created. Archive {res['backup_file']} secured with SHA-256 verification in {res['latency_ms']} milliseconds."
+        card = {
+            "title": "Vault Backup Created",
+            "content": f"Archive: {res['backup_file']}\nSize: {res['size_bytes']} bytes\nSHA-256: {res['sha256'][:16]}...",
+            "type": "backup"
+        }
+        screen = "living_surface"
+        extra_data["backup"] = res
+
+    elif action == "backup_status":
+        from aeonix.core.backup import list_backups
+        bk_list = list_backups()
+        count = len(bk_list)
+        latest = bk_list[0]['file_name'] if bk_list else 'None'
+        speech = f"Sovereign storage contains {count} verified vault backups."
+        card = {
+            "title": "Vault Backups",
+            "content": f"Total Archives: {count}\nLatest: {latest}\nIntegrity: Cryptographically Verified",
+            "type": "backup"
+        }
+        screen = "living_surface"
+        extra_data["backups"] = bk_list
+
+    elif action == "morph_status":
+        from aeonix.core.morph import get_pending_proposals
+        props = get_pending_proposals()
+        speech = f"MORPH Evolution Engine has {len(props)} optimization proposals registered."
+        card = {
+            "title": "MORPH Evolution Engine",
+            "content": f"Active Proposals: {len(props)}\nGuardrail: Sentinel Gate Active\nSelf-Authorization: BLOCKED",
+            "type": "evolution"
+        }
+        screen = "living_surface"
+        extra_data["proposals"] = props
+
+    elif action == "oracle_council":
+        from aeonix.core.council import convene_council_session
+        council_res = convene_council_session(query=f"Strategic Direction for {actor}")
+        speech = f"Oracle's Council convened across 4 perspectives. Verdict: {council_res['verdict']['consensus']}"
+        card = {
+            "title": "Oracle's Council Verdict",
+            "content": f"Consensus: {council_res['verdict']['consensus']}\nPrimary Risk: {council_res['verdict']['primary_risk']}",
+            "type": "council"
+        }
+        screen = "living_surface"
+        extra_data["council"] = council_res
 
     elif action == "mode_sanctuary":
         from aeonix.core.sanctuary import engage_sanctuary
