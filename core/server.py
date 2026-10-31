@@ -172,6 +172,11 @@ async def resolve_sentinel(request):
                     "error": f"OPERATOR_AUTH_FAILED: {msg}"
                 }, status_code=403)
 
+            if not expected_action_digest or not str(expected_action_digest).strip():
+                return JSONResponse({
+                    "error": "ACTION_DIGEST_REQUIRED: Approval of consequential actions strictly requires reviewed action_digest in request payload"
+                }, status_code=400)
+
             passphrase_verified = True
 
         ok, status_reason = resolve_sentinel_request(

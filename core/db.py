@@ -5,9 +5,14 @@ import json
 import hashlib
 from typing import Optional, Dict, Any, List
 
-DB_PATH = os.path.expanduser("~/aeonix/data/aeonix_vault.db")
+DB_PATH = os.getenv("AEONIX_DB_PATH", os.path.expanduser("~/aeonix/data/aeonix_vault.db"))
 
-def get_connection(db_path: str = DB_PATH, allow_maintenance: bool = False) -> sqlite3.Connection:
+def get_db_path() -> str:
+    """Returns dynamic database path respecting test isolation environment variables."""
+    return os.getenv("AEONIX_DB_PATH", DB_PATH)
+
+def get_connection(db_path: Optional[str] = None, allow_maintenance: bool = False) -> sqlite3.Connection:
+    actual_db = db_path or get_db_path()
     if not allow_maintenance:
         maint = False
         try:
@@ -18,8 +23,10 @@ def get_connection(db_path: str = DB_PATH, allow_maintenance: bool = False) -> s
         if maint:
             raise sqlite3.OperationalError("DATABASE_LOCKED: System is in disaster recovery maintenance mode")
 
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path, timeout=5.0)
+    dir_name = os.path.dirname(actual_db)
+    if dir_name:
+        os.makedirs(dir_name, exist_ok=True)
+    conn = sqlite3.connect(actual_db, timeout=5.0)
     conn.row_factory = sqlite3.Row
     # Anti-Corruption & High-Performance Hardening Mandates
     conn.execute("PRAGMA journal_mode = WAL;")
@@ -42,7 +49,19 @@ def compute_action_digest(
     canonical_payload = f"{request_id}|{agent}|{action_type}|{target}|{scope_canonical}"
     return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
-def init_database(db_path: str = DB_PATH) -> bool:
+def get_sentinel_request_digest(req_id: str, db_path: Optional[str] = None) -> Optional[str]:
+    """Retrieves the cryptographic action digest for a queued Sentinel request."""
+    actual_db = db_path or get_db_path()
+    conn = get_connection(actual_db, allow_maintenance=True)
+    cur = conn.cursor()
+    cur.execute("SELECT action_digest FROM sentinel_requests WHERE id = ?;", (req_id,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return row["action_digest"]
+    return None
+
+def init_database(db_path: Optional[str] = None) -> bool:
     """Initializes tables and performs integrity checks."""
     conn = get_connection(db_path, allow_maintenance=True)
     cur = conn.cursor()
@@ -281,7 +300,7 @@ def log_audit_event(
     target: str, 
     result: str, 
     details: Dict[str, Any], 
-    db_path: str = DB_PATH,
+    db_path: Optional[str] = None,
     conn: Optional[sqlite3.Connection] = None,
     allow_maintenance: bool = False
 ) -> str:
@@ -320,7 +339,7 @@ def log_audit_event(
         conn.close()
     return current_hash
 
-def queue_sentinel_request(agent: str, action_class: str, action_type: str, target: str, scope: Dict[str, Any], risk_level: str, ttl_seconds: int = 300, db_path: str = DB_PATH, timeout_seconds: Optional[int] = None) -> str:
+def queue_sentinel_request(agent: str, action_class: str, action_type: str, target: str, scope: Dict[str, Any], risk_level: str, ttl_seconds: int = 300, db_path: Optional[str] = None, timeout_seconds: Optional[int] = None) -> str:
     """Enqueues a pending action for human verification (Sentinel Gate)."""
     if timeout_seconds is not None:
         ttl_seconds = int(timeout_seconds)
@@ -353,7 +372,7 @@ def queue_sentinel_request(agent: str, action_class: str, action_type: str, targ
 
 create_sentinel_request = queue_sentinel_request
 
-def query_db(query: str, args: tuple = (), db_path: str = DB_PATH) -> list:
+def query_db(query: str, args: tuple = (), db_path: Optional[str] = None) -> list:
     conn = get_connection(db_path)
     cur = conn.cursor()
     cur.execute(query, args)
@@ -361,7 +380,7 @@ def query_db(query: str, args: tuple = (), db_path: str = DB_PATH) -> list:
     conn.close()
     return rows
 
-def execute_db(query: str, args: tuple = (), db_path: str = DB_PATH) -> int:
+def execute_db(query: str, args: tuple = (), db_path: Optional[str] = None) -> int:
     conn = get_connection(db_path)
     cur = conn.cursor()
     cur.execute(query, args)
@@ -370,7 +389,7 @@ def execute_db(query: str, args: tuple = (), db_path: str = DB_PATH) -> int:
     conn.close()
     return lastrowid
 
-def get_system_state(key: str, default: Any = None, db_path: str = DB_PATH) -> Any:
+def get_system_state(key: str, default: Any = None, db_path: Optional[str] = None) -> Any:
     """Retrieves persisted sovereign system state across reboots."""
     conn = get_connection(db_path)
     cur = conn.cursor()
@@ -384,7 +403,7 @@ def get_system_state(key: str, default: Any = None, db_path: str = DB_PATH) -> A
             return row["value_json"]
     return default
 
-def set_system_state(key: str, value: Any, db_path: str = DB_PATH):
+def set_system_state(key: str, value: Any, db_path: Optional[str] = None):
     """Persists sovereign system state across reboots."""
     conn = get_connection(db_path)
     cur = conn.cursor()
@@ -396,7 +415,7 @@ def set_system_state(key: str, value: Any, db_path: str = DB_PATH):
     conn.commit()
     conn.close()
 
-def is_token_revoked(nonce: str, db_path: str = DB_PATH) -> bool:
+def is_token_revoked(nonce: str, db_path: Optional[str] = None) -> bool:
     """Checks if a cryptographic token nonce has been revoked."""
     if not nonce:
         return True
@@ -407,7 +426,7 @@ def is_token_revoked(nonce: str, db_path: str = DB_PATH) -> bool:
     conn.close()
     return revoked
 
-def revoke_token(nonce: str, reason: str = "Operator Revocation", db_path: str = DB_PATH) -> bool:
+def revoke_token(nonce: str, reason: str = "Operator Revocation", db_path: Optional[str] = None) -> bool:
     """Revokes a cryptographic token nonce permanently."""
     if not nonce:
         return False
@@ -420,7 +439,7 @@ def revoke_token(nonce: str, reason: str = "Operator Revocation", db_path: str =
     log_audit_event("SECURITY", "revoke_token", nonce, "revoked", {"reason": reason}, db_path=db_path)
     return True
 
-def record_order_nonce(nonce: str, mission_id: str, db_path: str = DB_PATH) -> bool:
+def record_order_nonce(nonce: str, mission_id: str, db_path: Optional[str] = None) -> bool:
     """
     Records an execution order nonce. Returns True if recorded (nonce fresh),
     or False if nonce was already used (prevents replay attacks).
@@ -440,7 +459,7 @@ def record_order_nonce(nonce: str, mission_id: str, db_path: str = DB_PATH) -> b
     conn.close()
     return True
 
-def check_sentinel_authorization(req_id: str, db_path: str = DB_PATH) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+def check_sentinel_authorization(req_id: str, db_path: Optional[str] = None) -> Tuple[bool, Optional[Dict[str, Any]], str]:
     """
     Checks authorization state immediately before execution.
     Returns (is_authorized: bool, request_dict: Optional[dict], reason: str).
@@ -470,7 +489,7 @@ def claim_sentinel_authorization(
     expected_scope: Optional[Dict[str, Any]] = None,
     expected_digest: Optional[str] = None,
     claimer: str = "FORGE",
-    db_path: str = DB_PATH
+    db_path: Optional[str] = None
 ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
     """
     Atomically verifies and claims an approved Sentinel authorization order.
@@ -596,7 +615,7 @@ def complete_sentinel_execution(
     success: bool,
     output_summary: str = "",
     error_msg: Optional[str] = None,
-    db_path: str = DB_PATH
+    db_path: Optional[str] = None
 ) -> bool:
     """
     Finalizes execution lifecycle: transitions status from 'claimed' to 'completed' or 'failed'.
@@ -657,7 +676,7 @@ def consume_sentinel_authorization(
     expected_action: Optional[str] = None,
     expected_scope: Optional[Dict[str, Any]] = None,
     expected_digest: Optional[str] = None,
-    db_path: str = DB_PATH
+    db_path: Optional[str] = None
 ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
     """
     Atomically verifies and consumes (claims) an approved Sentinel authorization order.
@@ -684,7 +703,7 @@ def resolve_sentinel_request(
     resolver_role: str = "POCO_CORE",
     passphrase_verified: bool = False,
     expected_action_digest: Optional[str] = None,
-    db_path: str = DB_PATH
+    db_path: Optional[str] = None
 ) -> Tuple[bool, str]:
     """
     Atomically resolves a pending Sentinel request (Approved or Denied).
@@ -760,6 +779,21 @@ def resolve_sentinel_request(
                 return False, "OPERATOR_PASSPHRASE_REQUIRED: Approval of consequential actions strictly requires operator passphrase verification"
 
             # 3. Action Digest Binding Mandate (Item 2)
+            if not expected_action_digest or not str(expected_action_digest).strip():
+                log_audit_event(
+                    actor=resolver,
+                    action="undigested_approval_attempt",
+                    target=row["target"],
+                    result="rejected",
+                    details={"request_id": req_id, "reason": "Protected approval strictly mandates reviewed action digest"},
+                    db_path=db_path,
+                    conn=conn
+                )
+                conn.commit()
+                conn.close()
+                return False, "ACTION_DIGEST_REQUIRED: Approval of consequential actions strictly requires the reviewed action digest"
+
+            clean_expected_digest = str(expected_action_digest).strip()
             try:
                 scope_dict = json.loads(row["scope_json"])
             except Exception:
@@ -772,10 +806,10 @@ def resolve_sentinel_request(
                 conn.close()
                 return False, "DATABASE_TAMPERING_DETECTED: Stored action digest does not match record parameters"
 
-            if expected_action_digest and expected_action_digest != actual_digest:
+            if clean_expected_digest != actual_digest:
                 conn.rollback()
                 conn.close()
-                return False, f"DIGEST_MISMATCH: Displayed digest '{expected_action_digest}' does not match record digest '{actual_digest}'"
+                return False, f"DIGEST_MISMATCH: Displayed digest '{clean_expected_digest}' does not match record digest '{actual_digest}'"
 
         status = "approved" if approved else "denied"
         audit_hash = log_audit_event(
@@ -807,7 +841,7 @@ def resolve_sentinel_request(
         conn.close()
         return False, f"TRANSACTION_ERROR: {str(e)}"
 
-def verify_audit_chain(db_path: str = DB_PATH, allow_maintenance: bool = False) -> Dict[str, Any]:
+def verify_audit_chain(db_path: Optional[str] = None, allow_maintenance: bool = False) -> Dict[str, Any]:
     """
     Cryptographically verifies the entire audit_log SHA-256 hash chain from genesis to tip.
     Detects any inserted, modified, or deleted records.

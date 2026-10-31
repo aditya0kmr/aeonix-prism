@@ -25,15 +25,25 @@ import hmac
 import hashlib
 import secrets
 import getpass
+import sqlite3
+import fcntl
 from typing import Dict, Any, Optional, Tuple, List
 
 from aeonix.core.db import (
-    DB_PATH, 
+    DB_PATH,
+    get_db_path,
     get_connection, 
     resolve_sentinel_request, 
-    log_audit_event
+    log_audit_event,
+    revoke_token
 )
-from aeonix.core.auth import SECRETS_DIR, ROLE_POCO_CORE
+from aeonix.core.auth import SECRETS_DIR, get_secrets_dir, ROLE_POCO_CORE
+
+def _s_dir(secrets_dir: Optional[str] = None) -> str:
+    return secrets_dir or get_secrets_dir()
+
+def _d_path(db_path: Optional[str] = None) -> str:
+    return db_path or get_db_path()
 
 OPERATOR_PIN_FILE = os.path.join(SECRETS_DIR, "operator_pin.json")
 OPERATOR_LOCKOUT_FILE = os.path.join(SECRETS_DIR, "operator_lockout.json")
@@ -43,8 +53,8 @@ PBKDF2_ITERATIONS = 600_000
 MIN_PASSPHRASE_LEN = 8
 
 
-def _ensure_secrets_dir(secrets_dir: str = SECRETS_DIR):
-    os.makedirs(secrets_dir, mode=0o700, exist_ok=True)
+def _ensure_secrets_dir(secrets_dir: Optional[str] = None):
+    os.makedirs(_s_dir(secrets_dir), mode=0o700, exist_ok=True)
 
 
 def _atomic_write_json(file_path: str, data: Dict[str, Any]):
@@ -61,20 +71,22 @@ def _atomic_write_json(file_path: str, data: Dict[str, Any]):
     os.replace(tmp_path, file_path)
 
 
-def is_operator_setup(secrets_dir: str = SECRETS_DIR) -> bool:
+def is_operator_setup(secrets_dir: Optional[str] = None) -> bool:
     """Returns True if operator passphrase has been configured."""
-    pin_file = os.path.join(secrets_dir, "operator_pin.json")
+    s_dir = _s_dir(secrets_dir)
+    pin_file = os.path.join(s_dir, "operator_pin.json")
     return os.path.exists(pin_file) and os.path.getsize(pin_file) > 0
 
 
-def is_operator_locked(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, int]:
+def is_operator_locked(secrets_dir: Optional[str] = None) -> Tuple[bool, float, int]:
     """
     Checks persistent lockout state.
     FAIL-CLOSED: If the lockout file exists but cannot be parsed or read,
     locks out the console by default (300s, 999 attempts).
     Returns (is_locked: bool, remaining_seconds: float, failed_attempts: int).
     """
-    lock_file = os.path.join(secrets_dir, "operator_lockout.json")
+    s_dir = _s_dir(secrets_dir)
+    lock_file = os.path.join(s_dir, "operator_lockout.json")
     if not os.path.exists(lock_file):
         return False, 0.0, 0
 
@@ -93,103 +105,176 @@ def is_operator_locked(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, int
         return True, 300.0, 999
 
 
-def record_failed_attempt(secrets_dir: str = SECRETS_DIR) -> Tuple[bool, float, int]:
+class ResetResult(dict):
+    """Verifiable structured reset result supporting both dict access and tuple unpacking."""
+    @property
+    def success(self) -> bool:
+        return bool(self.get("success", False))
+
+    def __iter__(self):
+        yield self.get("success", False)
+        yield self.get("message") or self.get("error", "")
+
+
+def record_failed_attempt(secrets_dir: Optional[str] = None) -> Tuple[bool, float, int]:
     """
-    Records a failed passphrase attempt and updates persistent lockout state atomically.
+    Records a failed passphrase attempt and updates persistent lockout state atomically and concurrency-safely.
     """
-    _ensure_secrets_dir(secrets_dir)
-    lock_file = os.path.join(secrets_dir, "operator_lockout.json")
+    s_dir = _s_dir(secrets_dir)
+    _ensure_secrets_dir(s_dir)
+    lock_file = os.path.join(s_dir, "operator_lockout.json")
+    mutex_file = os.path.join(s_dir, ".lockout.lock")
     now = time.time()
     failed_attempts = 1
     lockout_duration = 0.0
 
-    if os.path.exists(lock_file):
+    with open(mutex_file, "a") as m_fd:
+        fcntl.flock(m_fd.fileno(), fcntl.LOCK_EX)
         try:
-            with open(lock_file, "r") as f:
-                data = json.load(f)
-            failed_attempts = data.get("failed_attempts", 0) + 1
-        except Exception:
-            # If corrupted, jump to maximum lockout
-            failed_attempts = 7
+            if os.path.exists(lock_file):
+                try:
+                    with open(lock_file, "r") as f:
+                        data = json.load(f)
+                    failed_attempts = data.get("failed_attempts", 0) + 1
+                except Exception:
+                    # If corrupted, jump to maximum lockout
+                    failed_attempts = 7
 
-    # Exponential lockout schedule: 3 attempts -> 30s, 5 attempts -> 60s, 7+ attempts -> 300s
-    if failed_attempts >= 7:
-        lockout_duration = 300.0
-    elif failed_attempts >= 5:
-        lockout_duration = 60.0
-    elif failed_attempts >= 3:
-        lockout_duration = 30.0
+            # Exponential lockout schedule: 3 attempts -> 30s, 5 attempts -> 60s, 7+ attempts -> 300s
+            if failed_attempts >= 7:
+                lockout_duration = 300.0
+            elif failed_attempts >= 5:
+                lockout_duration = 60.0
+            elif failed_attempts >= 3:
+                lockout_duration = 30.0
 
-    lockout_until = now + lockout_duration if lockout_duration > 0 else 0.0
+            lockout_until = now + lockout_duration if lockout_duration > 0 else 0.0
 
-    _atomic_write_json(lock_file, {
-        "failed_attempts": failed_attempts,
-        "lockout_until": lockout_until,
-        "last_attempt_at": now
-    })
+            _atomic_write_json(lock_file, {
+                "failed_attempts": failed_attempts,
+                "lockout_until": lockout_until,
+                "last_attempt_at": now
+            })
+        finally:
+            fcntl.flock(m_fd.fileno(), fcntl.LOCK_UN)
 
     return (lockout_duration > 0), lockout_duration, failed_attempts
 
 
-def reset_lockout_state(secrets_dir: str = SECRETS_DIR):
-    """Resets persistent lockout counter upon successful authentication."""
-    lock_file = os.path.join(secrets_dir, "operator_lockout.json")
+def reset_lockout_state(secrets_dir: Optional[str] = None):
+    """Resets persistent lockout counter upon successful authentication concurrency-safely."""
+    s_dir = _s_dir(secrets_dir)
+    lock_file = os.path.join(s_dir, "operator_lockout.json")
+    mutex_file = os.path.join(s_dir, ".lockout.lock")
     if os.path.exists(lock_file):
         try:
-            _atomic_write_json(lock_file, {
-                "failed_attempts": 0, 
-                "lockout_until": 0.0, 
-                "last_attempt_at": time.time()
-            })
+            with open(mutex_file, "a") as m_fd:
+                fcntl.flock(m_fd.fileno(), fcntl.LOCK_EX)
+                try:
+                    _atomic_write_json(lock_file, {
+                        "failed_attempts": 0, 
+                        "lockout_until": 0.0, 
+                        "last_attempt_at": time.time()
+                    })
+                finally:
+                    fcntl.flock(m_fd.fileno(), fcntl.LOCK_UN)
         except Exception:
             pass
 
 
 def reset_operator_credentials(
-    secrets_dir: str = SECRETS_DIR, 
+    secrets_dir: Optional[str] = None, 
     confirm: bool = False, 
-    db_path: str = DB_PATH
-) -> Tuple[bool, str]:
+    db_path: Optional[str] = None
+) -> ResetResult:
     """
     Deliberate physical operator reset procedure.
     Requires explicit confirm=True.
     Invalidates stored PIN/hash, resets lockout state, and revokes operator sessions.
+    Returns verifiable ResetResult with revoked nonces list, count, and audit event hash.
     """
     if not confirm:
-        return False, "CONFIRMATION_REQUIRED: Deliberate local operator action required (confirm=True)."
+        return ResetResult({
+            "success": False,
+            "error": "CONFIRMATION_REQUIRED: Deliberate local operator action required (confirm=True)."
+        })
 
-    pin_file = os.path.join(secrets_dir, "operator_pin.json")
-    lock_file = os.path.join(secrets_dir, "operator_lockout.json")
+    s_dir = _s_dir(secrets_dir)
+    d_path = _d_path(db_path)
+    pin_file = os.path.join(s_dir, "operator_pin.json")
+    lock_file = os.path.join(s_dir, "operator_lockout.json")
+
+    pin_removed = False
+    lockout_cleared = False
 
     if os.path.exists(pin_file):
         try:
             os.remove(pin_file)
+            pin_removed = True
         except Exception as e:
-            return False, f"FAILED_TO_REMOVE_PIN: {str(e)}"
+            return ResetResult({"success": False, "error": f"FAILED_TO_REMOVE_PIN: {str(e)}"})
 
     if os.path.exists(lock_file):
         try:
             os.remove(lock_file)
+            lockout_cleared = True
         except Exception:
             pass
 
-    # Revoke operator tokens in DB
+    # Revoke operator and pairing tokens in DB and collect nonces
+    revoked_nonces = []
     try:
-        from aeonix.core.auth import revoke_token
-        conn = get_connection(db_path, allow_maintenance=True)
-        cur = conn.cursor()
-        cur.execute("SELECT nonce FROM issued_tokens WHERE role = ? AND revoked = 0;", (ROLE_POCO_CORE,))
-        for r in cur.fetchall():
-            revoke_token(r["nonce"], reason="operator_credentials_reset", db_path=db_path)
-        conn.close()
+        import base64
+        for f in os.listdir(s_dir):
+            if f.startswith("token_") and f.endswith(".json"):
+                t_path = os.path.join(s_dir, f)
+                try:
+                    with open(t_path, "r") as tf:
+                        data = json.load(tf)
+                    token_str = data.get("token", "")
+                    if token_str and "." in token_str:
+                        payload_b64 = token_str.split(".", 1)[0]
+                        rem = len(payload_b64) % 4
+                        if rem > 0:
+                            payload_b64 += "=" * (4 - rem)
+                        raw_payload = base64.urlsafe_b64decode(payload_b64.encode("ascii"))
+                        payload = json.loads(raw_payload.decode("utf-8"))
+                        nonce = payload.get("nonce")
+                        if nonce:
+                            revoke_token(nonce, reason="operator_credentials_reset", db_path=d_path)
+                            revoked_nonces.append(nonce)
+                    os.remove(t_path)
+                except Exception:
+                    pass
     except Exception:
         pass
 
-    log_audit_event("OPERATOR", "reset_operator_credentials", "operator_console", "ok", {"reason": "deliberate_physical_reset"}, db_path=db_path)
-    return True, "RESET_SUCCESSFUL: Operator credentials reset. Console returned to first-run setup state."
+    audit_hash = log_audit_event(
+        actor="OPERATOR",
+        action="reset_operator_credentials",
+        target="operator_console",
+        result="ok",
+        details={
+            "reason": "deliberate_physical_reset",
+            "revoked_tokens_count": len(revoked_nonces),
+            "revoked_nonces": revoked_nonces
+        },
+        db_path=d_path,
+        allow_maintenance=True
+    )
+
+    return ResetResult({
+        "success": True,
+        "message": "RESET_SUCCESSFUL: Operator credentials reset. Console returned to first-run setup state.",
+        "revoked_tokens_count": len(revoked_nonces),
+        "revoked_nonces": revoked_nonces,
+        "audit_hash": audit_hash,
+        "pin_removed": pin_removed,
+        "lockout_cleared": lockout_cleared
+    })
 
 
-def setup_operator_secret(passphrase: str, secrets_dir: str = SECRETS_DIR) -> Tuple[bool, str]:
+def setup_operator_secret(passphrase: str, secrets_dir: Optional[str] = None) -> Tuple[bool, str]:
     """
     Sets up the sovereign operator passphrase on first run.
     Mandates minimum length and generates fresh random 32-byte salt with PBKDF2-HMAC-SHA256.
@@ -197,8 +282,9 @@ def setup_operator_secret(passphrase: str, secrets_dir: str = SECRETS_DIR) -> Tu
     if len(passphrase) < MIN_PASSPHRASE_LEN:
         return False, f"Passphrase too short: minimum {MIN_PASSPHRASE_LEN} characters required"
 
-    _ensure_secrets_dir(secrets_dir)
-    pin_file = os.path.join(secrets_dir, "operator_pin.json")
+    s_dir = _s_dir(secrets_dir)
+    _ensure_secrets_dir(s_dir)
+    pin_file = os.path.join(s_dir, "operator_pin.json")
     if os.path.exists(pin_file):
         return False, "Operator passphrase already configured. Use reset procedure with recovery key to modify."
 
@@ -218,20 +304,18 @@ def setup_operator_secret(passphrase: str, secrets_dir: str = SECRETS_DIR) -> Tu
     log_audit_event("OPERATOR", "setup_secret", "operator_console", "ok", {"iterations": PBKDF2_ITERATIONS})
     return True, "Operator passphrase initialized successfully"
 
-    log_audit_event("OPERATOR", "setup_secret", "operator_console", "ok", {"iterations": PBKDF2_ITERATIONS})
-    return True, "Operator passphrase initialized successfully"
 
-
-def verify_operator_secret(passphrase: str, secrets_dir: str = SECRETS_DIR) -> Tuple[bool, str]:
+def verify_operator_secret(passphrase: str, secrets_dir: Optional[str] = None) -> Tuple[bool, str]:
     """
     Verifies operator passphrase against stored PBKDF2 hash.
     Enforces persistent lockout check and rate limiting.
     """
-    pin_file = os.path.join(secrets_dir, "operator_pin.json")
+    s_dir = _s_dir(secrets_dir)
+    pin_file = os.path.join(s_dir, "operator_pin.json")
     if not os.path.exists(pin_file):
         return False, "NOT_INITIALIZED: Operator passphrase has not been set up"
 
-    is_locked, remaining_s, attempts = is_operator_locked(secrets_dir)
+    is_locked, remaining_s, attempts = is_operator_locked(s_dir)
     if is_locked:
         return False, f"LOCKED_OUT: Operator console locked for remaining {remaining_s}s (Restarting console does not bypass lockout)"
 
@@ -246,10 +330,10 @@ def verify_operator_secret(passphrase: str, secrets_dir: str = SECRETS_DIR) -> T
         actual_hash = hashlib.pbkdf2_hmac("sha256", passphrase.encode("utf-8"), salt, iterations)
 
         if hmac.compare_digest(expected_hash, actual_hash):
-            reset_lockout_state(secrets_dir)
+            reset_lockout_state(s_dir)
             return True, "AUTHENTICATED"
         else:
-            is_now_locked, lock_dur, total_attempts = record_failed_attempt(secrets_dir)
+            is_now_locked, lock_dur, total_attempts = record_failed_attempt(s_dir)
             if is_now_locked:
                 return False, f"INCORRECT_SECRET: Account locked out for {lock_dur}s ({total_attempts} failed attempts)"
             return False, f"INCORRECT_SECRET: Authentication failed ({total_attempts} failed attempts)"
@@ -272,9 +356,9 @@ def compute_action_digest(
     return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
 
-def get_pending_sentinel_requests(db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+def get_pending_sentinel_requests(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """Fetches currently pending unexpired Sentinel requests."""
-    conn = get_connection(db_path)
+    conn = get_connection(_d_path(db_path))
     cur = conn.cursor()
     now = time.time()
     cur.execute("""
@@ -337,18 +421,20 @@ def review_and_resolve_order(
     approved: bool,
     passphrase: Optional[str] = None,
     expected_action_digest: Optional[str] = None,
-    secrets_dir: str = SECRETS_DIR,
-    db_path: str = DB_PATH
+    secrets_dir: Optional[str] = None,
+    db_path: Optional[str] = None
 ) -> Tuple[bool, str]:
     """
     Validates operator passphrase and resolves the Sentinel request.
     Approved=True strictly requires successful passphrase validation.
     Enforces displayed-digest-to-approved-record binding.
     """
+    s_dir = _s_dir(secrets_dir)
+    d_path = _d_path(db_path)
     if approved:
         if not passphrase:
             return False, "PASSPHRASE_REQUIRED: Approval requires operator passphrase"
-        is_valid, msg = verify_operator_secret(passphrase, secrets_dir=secrets_dir)
+        is_valid, msg = verify_operator_secret(passphrase, secrets_dir=s_dir)
         if not is_valid:
             return False, f"OPERATOR_AUTH_FAILED: {msg}"
 
@@ -359,7 +445,7 @@ def review_and_resolve_order(
         resolver_role=ROLE_POCO_CORE,
         passphrase_verified=True if approved else False,
         expected_action_digest=expected_action_digest,
-        db_path=db_path
+        db_path=d_path
     )
     return ok, reason
 

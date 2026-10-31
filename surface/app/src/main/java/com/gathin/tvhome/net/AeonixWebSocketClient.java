@@ -83,6 +83,10 @@ public class AeonixWebSocketClient {
     }
 
     private SSLSocketFactory getPinnedSSLSocketFactory(String expectedFingerprint) throws Exception {
+        if (expectedFingerprint == null || expectedFingerprint.trim().isEmpty()) {
+            throw new IllegalArgumentException("MISSING_PIN: Certificate pin cannot be null or empty. Plaintext fallback prohibited.");
+        }
+        final String cleanExpected = expectedFingerprint.replaceAll("[:\\s]", "").toUpperCase();
         TrustManager[] trustManagers = new TrustManager[]{
             new X509TrustManager() {
                 @Override
@@ -103,11 +107,8 @@ public class AeonixWebSocketClient {
                             sb.append(String.format("%02X", b));
                         }
                         String actualFingerprint = sb.toString();
-                        if (expectedFingerprint != null && !expectedFingerprint.isEmpty()) {
-                            String cleanExpected = expectedFingerprint.replaceAll("[:\\s]", "").toUpperCase();
-                            if (!actualFingerprint.equalsIgnoreCase(cleanExpected)) {
-                                throw new CertificateException("Certificate pin mismatch! Expected " + cleanExpected + " but got " + actualFingerprint);
-                            }
+                        if (!actualFingerprint.equalsIgnoreCase(cleanExpected)) {
+                            throw new CertificateException("Certificate pin mismatch! Expected " + cleanExpected + " but got " + actualFingerprint);
                         }
                     } catch (Exception e) {
                         if (e instanceof CertificateException) throw (CertificateException) e;
@@ -324,19 +325,17 @@ public class AeonixWebSocketClient {
 
     private void connectAndListen() throws Exception {
         String pinnedFp = loadPinnedFingerprint();
-        if (!pinnedFp.isEmpty() || targetPort == 8443) {
-            Log.i(TAG, "Initiating Sovereign TLS Handshake with certificate pinning");
-            SSLSocketFactory sslFactory = getPinnedSSLSocketFactory(pinnedFp);
-            SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
-            sslSocket.connect(new InetSocketAddress(targetHost, targetPort), 5000);
-            sslSocket.setTcpNoDelay(true);
-            sslSocket.startHandshake();
-            socket = sslSocket;
-        } else {
-            socket = new Socket();
-            socket.connect(new InetSocketAddress(targetHost, targetPort), 5000);
-            socket.setTcpNoDelay(true);
+        if (pinnedFp == null || pinnedFp.trim().isEmpty()) {
+            throw new IllegalStateException("NO_PIN_PROVISIONED: Sovereign glass terminal strictly mandates a valid provisioned certificate pin. Plaintext fallback prohibited.");
         }
+
+        Log.i(TAG, "Initiating Sovereign TLS Handshake with certificate pinning");
+        SSLSocketFactory sslFactory = getPinnedSSLSocketFactory(pinnedFp.trim());
+        SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
+        sslSocket.connect(new InetSocketAddress(targetHost, targetPort), 5000);
+        sslSocket.setTcpNoDelay(true);
+        sslSocket.startHandshake();
+        socket = sslSocket;
 
         InputStream in = socket.getInputStream();
         outStream = socket.getOutputStream();

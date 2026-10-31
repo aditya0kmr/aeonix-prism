@@ -27,6 +27,7 @@ from aeonix.core.db import (
     resolve_sentinel_request, 
     check_sentinel_authorization,
     revoke_token,
+    compute_action_digest,
     is_token_revoked
 )
 from aeonix.core.trust import trust
@@ -113,13 +114,15 @@ class TestStage1Security(unittest.TestCase):
         self.assertFalse(tv_ok)
         self.assertIn("POCO_AUTHORITY_REQUIRED", tv_reason)
 
-        # 2. POCO approves -> MUST SUCCEED
+        # 2. POCO approves with verified passphrase and reviewed action digest -> MUST SUCCEED
+        digest = compute_action_digest(req_id, "TEST_AGENT", "TEST_ACTION", "test_target", {"reason": "test"})
         poco_ok, poco_reason = resolve_sentinel_request(
             req_id=req_id,
             approved=True,
             resolver="Operator_Aadi",
             resolver_role=ROLE_POCO_CORE,
-            passphrase_verified=True
+            passphrase_verified=True,
+            expected_action_digest=digest
         )
         self.assertTrue(poco_ok)
         self.assertEqual(poco_reason, "approved")

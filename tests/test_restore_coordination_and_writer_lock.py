@@ -39,6 +39,8 @@ class TestRestoreCoordinationAndWriterLock(unittest.TestCase):
 
     def tearDown(self):
         set_maintenance_mode(False)
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_01_active_writer_blocked_during_maintenance(self):
         """Active writers calling get_connection or log_audit_event during maintenance raise OperationalError."""
@@ -84,6 +86,28 @@ class TestRestoreCoordinationAndWriterLock(unittest.TestCase):
         self.assertFalse(is_maintenance_mode())
 
         # Connections can open normally after restore
+        conn = get_connection(self.db_path)
+        self.assertIsNotNone(conn)
+        conn.close()
+
+    def test_04_active_writer_causes_quiescence_failure_and_aborts_restore(self):
+        """Active writers holding locks cause quiescence failure; restore aborts without modifying target."""
+        # Active writer holding exclusive transaction
+        blocker = sqlite3.connect(self.db_path, timeout=0.1)
+        blocker.execute("BEGIN EXCLUSIVE;")
+        blocker.execute("CREATE TABLE IF NOT EXISTS quiesce_block (id INT);")
+
+        try:
+            # Restore must detect active writer, fail quiescence, and abort cleanly
+            res = restore_vault_backup(self.archive_path, target_db_path=self.db_path)
+            self.assertFalse(res["success"])
+            self.assertEqual(res["status"], "RESTORE_ABORTED_QUIESCENCE_FAILED")
+            self.assertIn("Active database writers could not be drained", res["error"])
+        finally:
+            blocker.rollback()
+            blocker.close()
+
+        # Database remains intact and functional after aborted restore
         conn = get_connection(self.db_path)
         self.assertIsNotNone(conn)
         conn.close()

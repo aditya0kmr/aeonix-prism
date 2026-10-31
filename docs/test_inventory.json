@@ -1,0 +1,1051 @@
+{
+  "generated_at": "2026-10-31T14:29:49Z",
+  "total_test_suites": 18,
+  "total_test_cases": 150,
+  "suites": [
+    {
+      "module": "test_agents",
+      "class": "TestAgentSystem",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_agents.py",
+      "tests": [
+        {
+          "test_name": "test_analyst_correlation",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_archivist_timeline",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_builder_git",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_collector_and_sentinel_hold",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_defender_assessment",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forensicator_manifest",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_legal_guard_boundaries",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_navigator_plan_decomposition",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_orchestrator_roster_and_dispatch",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_reporter_briefing",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_skeptic_validation",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 11
+    },
+    {
+      "module": "test_boundary_auth_inventory",
+      "class": "TestBoundaryAuthInventory",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_boundary_auth_inventory.py",
+      "tests": [
+        {
+          "test_name": "test_01_dynamic_route_inventory_default_deny_unauthenticated",
+          "docstring": "Every registered HTTP route (except GET /api/status) MUST reject unauthenticated requests with 401.",
+          "full_docstring": "Every registered HTTP route (except GET /api/status) MUST reject unauthenticated requests with 401.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_02_public_minimal_liveness_zero_knowledge",
+          "docstring": "GET /api/status MUST return minimal liveness only: zero usernames, device counts, or resources.",
+          "full_docstring": "GET /api/status MUST return minimal liveness only: zero usernames, device counts, or resources.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_authenticated_system_status_poco_authority_only",
+          "docstring": "GET /api/system/status exposes full metrics strictly to POCO_CORE; rejects unauthenticated & TV.",
+          "full_docstring": "GET /api/system/status exposes full metrics strictly to POCO_CORE; rejects unauthenticated & TV.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_04_role_segregation_firetv_glass_restricted",
+          "docstring": "ROLE_FIRETV_GLASS is strictly blocked from consequential/admin endpoints.",
+          "full_docstring": "ROLE_FIRETV_GLASS is strictly blocked from consequential/admin endpoints.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_05_websocket_boundary_query_param_rejection_and_header_acceptance",
+          "docstring": "WebSocket endpoint rejects URL query parameter tokens, forged tokens, and accepts Bearer header.",
+          "full_docstring": "WebSocket endpoint rejects URL query parameter tokens, forged tokens, and accepts Bearer header.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_sentinel_lifecycle_starting_state_validation",
+          "docstring": "complete_sentinel_execution MUST reject invalid starting states (pending/approved/completed).",
+          "full_docstring": "complete_sentinel_execution MUST reject invalid starting states (pending/approved/completed).",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_07_file_protection_canonical_path_containment_and_options",
+          "docstring": "File removal operations enforce option validation and canonical resolved-path barriers.",
+          "full_docstring": "File removal operations enforce option validation and canonical resolved-path barriers.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_08_system_wide_maintenance_mode_lock",
+          "docstring": "Active maintenance mode locks SQLite writers with OperationalError and HTTP handlers with 503.",
+          "full_docstring": "Active maintenance mode locks SQLite writers with OperationalError and HTTP handlers with 503.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_09_operator_console_first_run_lockout_and_digest",
+          "docstring": "Operator console requires PBKDF2 setup, enforces persistent lockout, and generates Action Digest.",
+          "full_docstring": "Operator console requires PBKDF2 setup, enforces persistent lockout, and generates Action Digest.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 9
+    },
+    {
+      "module": "test_hybrid_router_and_ai",
+      "class": "TestHybridRouterAndAI",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_hybrid_router_and_ai.py",
+      "tests": [
+        {
+          "test_name": "test_local_llm_benchmark_execution",
+          "docstring": "Verify llama-server startup, token generation speed, and RAM recovery.",
+          "full_docstring": "Verify llama-server startup, token generation speed, and RAM recovery.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_model_metadata_and_cryptographic_hash",
+          "docstring": "Verify installed model metadata, license, and cryptographic SHA-256.",
+          "full_docstring": "Verify installed model metadata, license, and cryptographic SHA-256.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_router_caching_behavior",
+          "docstring": "Verify repeated queries hit memory cache in sub-5ms.",
+          "full_docstring": "Verify repeated queries hit memory cache in sub-5ms.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_router_status_and_provider_declarations",
+          "docstring": "Test provider catalog, modalities, and daily quota limits.",
+          "full_docstring": "Test provider catalog, modalities, and daily quota limits.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_sovereign_fallback_when_external_cloud_disabled",
+          "docstring": "Ensure requesting external AI without key safely falls back to local Qwen.",
+          "full_docstring": "Ensure requesting external AI without key safely falls back to local Qwen.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_tier_0_fast_path_routing_latency",
+          "docstring": "Verify Fast-Path queries bypass LLMs completely in under 50ms.",
+          "full_docstring": "Verify Fast-Path queries bypass LLMs completely in under 50ms.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 6
+    },
+    {
+      "module": "test_master_system",
+      "class": "TestMasterSystemEngines",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_master_system.py",
+      "tests": [
+        {
+          "test_name": "test_aadya_priority_and_radar",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_atlas_situational_summary",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_blackbox_flight_recorder",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_chronos_routines",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_chronoscope_audit_replay",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_dreamcatcher_incubate",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_mind_propose_tool",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_ghost_digital_twin_and_fault",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_identity_exposure",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_lumen_living_surface",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_mimic_workflow_clone",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_nexus_room_celestial_universe",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_oracle_research",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_paradox_decision_replay",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_signal_pattern_detector",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_trust_signed_orders_and_kill_switch",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 16
+    },
+    {
+      "module": "test_narrow_fs_allowlist",
+      "class": "TestNarrowFsAllowlistAndClaimFinalization",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_narrow_fs_allowlist.py",
+      "tests": [
+        {
+          "test_name": "test_01_narrow_fs_allowlist_positive_containment",
+          "docstring": "is_within_narrow_fs_allowlist returns True for allowed subpaths, False for system roots.",
+          "full_docstring": "is_within_narrow_fs_allowlist returns True for allowed subpaths, False for system roots.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_allowlist_root_deletion_prohibited",
+          "docstring": "Mutation or deletion of the allowlist root itself is strictly prohibited.",
+          "full_docstring": "Mutation or deletion of the allowlist root itself is strictly prohibited.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_03_agent_state_directories_protected",
+          "docstring": "Removal of agent state (.gemini, antigravity-cli, brain) is blocked as PROTECTED_RESOURCE.",
+          "full_docstring": "Removal of agent state (.gemini, antigravity-cli, brain) is blocked as PROTECTED_RESOURCE.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_04_pre_gate_target_outside_allowlist_rejected",
+          "docstring": "Pre-gate rejection when target is outside allowlist.",
+          "full_docstring": "Pre-gate rejection when target is outside allowlist.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_05_post_claim_target_outside_allowlist_finalizes_claim",
+          "docstring": "When an approved Sentinel request attempts execution on a target outside allowlist, claim transitions to 'failed'.",
+          "full_docstring": "When an approved Sentinel request attempts execution on a target outside allowlist, claim transitions to 'failed'.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_successful_execution_finalizes_claim_as_completed",
+          "docstring": "When an approved Sentinel request executes successfully, claim transitions to 'completed'.",
+          "full_docstring": "When an approved Sentinel request executes successfully, claim transitions to 'completed'.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 6
+    },
+    {
+      "module": "test_negative_security_and_auth",
+      "class": "TestNegativeSecurityAndAuth",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_negative_security_and_auth.py",
+      "tests": [
+        {
+          "test_name": "test_01_forged_or_invalid_token_rejected",
+          "docstring": "Tokens with invalid signatures or altered payloads must fail verification.",
+          "full_docstring": "Tokens with invalid signatures or altered payloads must fail verification.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_02_firetv_approval_attempt_rejected",
+          "docstring": "Fire TV Glass terminal is strictly forbidden from approving consequential actions.",
+          "full_docstring": "Fire TV Glass terminal is strictly forbidden from approving consequential actions.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_03_altered_target_mismatch_rejected",
+          "docstring": "An approval granted for Target A cannot be used to execute on Target B.",
+          "full_docstring": "An approval granted for Target A cannot be used to execute on Target B.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_04_sentinel_replay_rejected_atomically_consumed",
+          "docstring": "An approval order is single-use: subsequent reuse attempts must be rejected.",
+          "full_docstring": "An approval order is single-use: subsequent reuse attempts must be rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_05_expired_approval_rejected",
+          "docstring": "Expired approvals (TTL elapsed) must not be executable.",
+          "full_docstring": "Expired approvals (TTL elapsed) must not be executable.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_execution_blocked_in_sanctuary_mode",
+          "docstring": "Consequential developer operations must be blocked if Sanctuary Mode is active.",
+          "full_docstring": "Consequential developer operations must be blocked if Sanctuary Mode is active.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_07_protected_resource_removal_rejected",
+          "docstring": "Attempts to delete critical repositories or databases must be rejected.",
+          "full_docstring": "Attempts to delete critical repositories or databases must be rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_08_scope_mismatch_arguments_and_cwd_rejected",
+          "docstring": "Approval granted for specific arguments and directory cannot be repurposed.",
+          "full_docstring": "Approval granted for specific arguments and directory cannot be repurposed.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_09_protected_resource_removal_rejected_under_valid_approval",
+          "docstring": "Even if an attacker tricks approval for .git or vault.db, Forge must halt and mark failed.",
+          "full_docstring": "Even if an attacker tricks approval for .git or vault.db, Forge must halt and mark failed.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_10_execution_lifecycle_state_transitions",
+          "docstring": "Verifies full lifecycle states: pending -> approved -> claimed -> completed.",
+          "full_docstring": "Verifies full lifecycle states: pending -> approved -> claimed -> completed.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_11_rest_api_auth_rejection_and_role_enforcement",
+          "docstring": "Verifies HTTP endpoints strictly enforce 401 unauthenticated and 403 role violation.",
+          "full_docstring": "Verifies HTTP endpoints strictly enforce 401 unauthenticated and 403 role violation.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_12_websocket_unauthenticated_handshake_rejected",
+          "docstring": "Verifies WebSocket endpoint rejects missing, query param, or forged tokens and accepts valid header tokens.",
+          "full_docstring": "Verifies WebSocket endpoint rejects missing, query param, or forged tokens and accepts valid header tokens.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_13_maintenance_mode_and_automatic_restore_rollback",
+          "docstring": "Verifies maintenance mode locking and automatic rollback when post-restore audit fails.",
+          "full_docstring": "Verifies maintenance mode locking and automatic rollback when post-restore audit fails.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 13
+    },
+    {
+      "module": "test_operator_lockout_failclosed",
+      "class": "TestOperatorLockoutFailClosed",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_operator_lockout_failclosed.py",
+      "tests": [
+        {
+          "test_name": "test_01_atomic_write_creates_valid_json",
+          "docstring": "_atomic_write_json creates valid file with 0600 permissions.",
+          "full_docstring": "_atomic_write_json creates valid file with 0600 permissions.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_corrupted_lockout_file_fails_closed",
+          "docstring": "FAIL-CLOSED: If operator_lockout.json is corrupted or unreadable, is_operator_locked must return True.",
+          "full_docstring": "FAIL-CLOSED: If operator_lockout.json is corrupted or unreadable, is_operator_locked must return True.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_03_lockout_persists_across_restarts",
+          "docstring": "Failed attempts accumulate and trigger persistent lockout across process restarts.",
+          "full_docstring": "Failed attempts accumulate and trigger persistent lockout across process restarts.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_04_deliberate_physical_reset_requires_confirmation",
+          "docstring": "reset_operator_credentials requires confirm=True and wipes operator secrets.",
+          "full_docstring": "reset_operator_credentials requires confirm=True and wipes operator secrets.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_concurrent_lockout_updates_thread_safe",
+          "docstring": "Concurrent threads updating lockout state concurrently use flock and remain uncorrupted.",
+          "full_docstring": "Concurrent threads updating lockout state concurrently use flock and remain uncorrupted.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_verifiable_reset_revocation_details",
+          "docstring": "reset_operator_credentials returns verifiable audit details and revokes active tokens.",
+          "full_docstring": "reset_operator_credentials returns verifiable audit details and revokes active tokens.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 6
+    },
+    {
+      "module": "test_phase3",
+      "class": "TestPhase3Arsenal",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase3.py",
+      "tests": [
+        {
+          "test_name": "test_atlas_watch_supervisor",
+          "docstring": "Test supervisor health pass.",
+          "full_docstring": "Test supervisor health pass.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_fast_path_arsenal_triggers",
+          "docstring": "Test sub-5ms intent resolution for Phase 3 directives.",
+          "full_docstring": "Test sub-5ms intent resolution for Phase 3 directives.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_guardian_subnet_discovery",
+          "docstring": "Test subnet perimeter inventory and device classification.",
+          "full_docstring": "Test subnet perimeter inventory and device classification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_panoptes_graph_and_sentinel",
+          "docstring": "Test entity graph insertion, traversal, and Sentinel gate hold.",
+          "full_docstring": "Test entity graph insertion, traversal, and Sentinel gate hold.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_veritas_forensics_and_tamper_detection",
+          "docstring": "Test evidence ingestion, cryptographic SHA-256 verification, and manifest integrity.",
+          "full_docstring": "Test evidence ingestion, cryptographic SHA-256 verification, and manifest integrity.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 5
+    },
+    {
+      "module": "test_phase4",
+      "class": "TestPhase4CinemaAndSanctuary",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase4.py",
+      "tests": [
+        {
+          "test_name": "test_fast_path_cinema_and_sanctuary_triggers",
+          "docstring": "Test sub-50ms intent matching and payload formatting.",
+          "full_docstring": "Test sub-50ms intent matching and payload formatting.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_sanctuary_lockdown_cycle",
+          "docstring": "Test engagement, vault protection, and release.",
+          "full_docstring": "Test engagement, vault protection, and release.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_spectra_channel_catalog_and_search",
+          "docstring": "Test channel lineup and query matching.",
+          "full_docstring": "Test channel lineup and query matching.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 3
+    },
+    {
+      "module": "test_phase4_panoptes_guardian",
+      "class": "TestPhase4PanoptesAndGuardian",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase4_panoptes_guardian.py",
+      "tests": [
+        {
+          "test_name": "test_entity_graph_upsert_and_traversal",
+          "docstring": "Test entity node deduplication, directed relations, and BFS traversal.",
+          "full_docstring": "Test entity node deduplication, directed relations, and BFS traversal.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_guardian_single_host_probe",
+          "docstring": "Test scanning localhost open ports via non-blocking TCP connect.",
+          "full_docstring": "Test scanning localhost open ports via non-blocking TCP connect.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_guardian_subnet_inventory_and_classification",
+          "docstring": "Test local perimeter inventory and rogue vs authorized classification.",
+          "full_docstring": "Test local perimeter inventory and rogue vs authorized classification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_panoptes_osint_report_generator",
+          "docstring": "Test automated OSINT dossier generation, security finding calculation, and audit logging.",
+          "full_docstring": "Test automated OSINT dossier generation, security finding calculation, and audit logging.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_passive_dns_and_http_fingerprint",
+          "docstring": "Test non-intrusive DNS resolution and HTTP security header inspection.",
+          "full_docstring": "Test non-intrusive DNS resolution and HTTP security header inspection.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_sentinel_gate_holds_active_network_probes",
+          "docstring": "Verify active TCP probes CANNOT execute without Sentinel Gate authorization.",
+          "full_docstring": "Verify active TCP probes CANNOT execute without Sentinel Gate authorization.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 6
+    },
+    {
+      "module": "test_phase5",
+      "class": "TestPhase5ForgeAndVisia",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase5.py",
+      "tests": [
+        {
+          "test_name": "test_fast_path_forge_triggers",
+          "docstring": "Test sub-20ms intent matching for Git telemetry and developer status.",
+          "full_docstring": "Test sub-20ms intent matching for Git telemetry and developer status.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_draft_and_risk_assessment",
+          "docstring": "Test natural language command drafting and risk tier classification.",
+          "full_docstring": "Test natural language command drafting and risk tier classification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_git_telemetry",
+          "docstring": "Test live Git repository branch and commit introspection.",
+          "full_docstring": "Test live Git repository branch and commit introspection.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_sandboxed_execution_and_sentinel_hold",
+          "docstring": "Test safe command execution vs Sentinel Gate hold on destructive directives.",
+          "full_docstring": "Test safe command execution vs Sentinel Gate hold on destructive directives.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_visia_forensic_analysis_and_ocr",
+          "docstring": "Test image geometry, SHA-256, OCR text extraction, and VERITAS case integration.",
+          "full_docstring": "Test image geometry, SHA-256, OCR text extraction, and VERITAS case integration.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 5
+    },
+    {
+      "module": "test_phase5_veritas_forge",
+      "class": "TestPhase5VeritasAndForge",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase5_veritas_forge.py",
+      "tests": [
+        {
+          "test_name": "test_forge_git_telemetry_live",
+          "docstring": "Test real Git branch, commit SHA, and remote introspection.",
+          "full_docstring": "Test real Git branch, commit SHA, and remote introspection.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_natural_language_drafting_and_risk",
+          "docstring": "Test natural language translation into shell commands and risk assessment.",
+          "full_docstring": "Test natural language translation into shell commands and risk assessment.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_sandboxed_safe_execution",
+          "docstring": "Test executing safe read-only operations via typed allowlist.",
+          "full_docstring": "Test executing safe read-only operations via typed allowlist.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_sentinel_hold_on_consequential_operations",
+          "docstring": "Test that destructive operations halt at Sentinel Gate and return request ID.",
+          "full_docstring": "Test that destructive operations halt at Sentinel Gate and return request ID.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_veritas_case_lifecycle_and_immutable_evidence",
+          "docstring": "Test case creation, SHA-256 evidence ingestion, and integrity verification.",
+          "full_docstring": "Test case creation, SHA-256 evidence ingestion, and integrity verification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_veritas_chronological_timeline_builder",
+          "docstring": "Test chronological timeline construction merging case, custody, and audit events.",
+          "full_docstring": "Test chronological timeline construction merging case, custody, and audit events.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_veritas_forensic_report_export",
+          "docstring": "Test generating and exporting an immutable case report with cryptographic digest.",
+          "full_docstring": "Test generating and exporting an immutable case report with cryptographic digest.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 7
+    },
+    {
+      "module": "test_phase6",
+      "class": "TestPhase6SovereignMesh",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase6.py",
+      "tests": [
+        {
+          "test_name": "test_backup_create_and_verify",
+          "docstring": "Test atomic SQLite WAL backup and archive verification.",
+          "full_docstring": "Test atomic SQLite WAL backup and archive verification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_emergency_recovery_key",
+          "docstring": "Test high-entropy recovery key generation and checksum.",
+          "full_docstring": "Test high-entropy recovery key generation and checksum.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_fast_path_phase6_triggers",
+          "docstring": "Test sub-50ms intent matching for backup, morph, and council directives.",
+          "full_docstring": "Test sub-50ms intent matching for backup, morph, and council directives.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_morph_self_evolution_guardrails",
+          "docstring": "Test proposal generation and mandatory Sentinel gate hold.",
+          "full_docstring": "Test proposal generation and mandatory Sentinel gate hold.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_oracle_council_adversarial_session",
+          "docstring": "Test 4-perspective deliberation and consensus verdict.",
+          "full_docstring": "Test 4-perspective deliberation and consensus verdict.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 5
+    },
+    {
+      "module": "test_poco_bearer_bypass_and_digest",
+      "class": "TestPocoBearerBypassAndDigestBinding",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_poco_bearer_bypass_and_digest.py",
+      "tests": [
+        {
+          "test_name": "test_01_db_level_bearer_alone_approval_rejected",
+          "docstring": "DB level: resolve_sentinel_request rejects approval without passphrase_verified=True.",
+          "full_docstring": "DB level: resolve_sentinel_request rejects approval without passphrase_verified=True.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_02_db_level_approval_with_verified_passphrase_succeeds",
+          "docstring": "DB level: resolve_sentinel_request succeeds when passphrase_verified=True and digest matches.",
+          "full_docstring": "DB level: resolve_sentinel_request succeeds when passphrase_verified=True and digest matches.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_db_level_digest_tampering_rejected",
+          "docstring": "DB level: resolve_sentinel_request rejects mismatched action digest.",
+          "full_docstring": "DB level: resolve_sentinel_request rejects mismatched action digest.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_04_db_level_missing_or_empty_digest_rejected",
+          "docstring": "DB level: resolve_sentinel_request rejects approval when action digest is omitted or empty.",
+          "full_docstring": "DB level: resolve_sentinel_request rejects approval when action digest is omitted or empty.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_05_api_level_poco_bearer_alone_without_passphrase_rejected",
+          "docstring": "API level: POST /api/sentinel/resolve with valid POCO Bearer token but NO passphrase yields 403.",
+          "full_docstring": "API level: POST /api/sentinel/resolve with valid POCO Bearer token but NO passphrase yields 403.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_api_level_poco_bearer_with_wrong_passphrase_rejected",
+          "docstring": "API level: POST /api/sentinel/resolve with incorrect operator passphrase yields 403.",
+          "full_docstring": "API level: POST /api/sentinel/resolve with incorrect operator passphrase yields 403.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_07_api_level_missing_action_digest_rejected",
+          "docstring": "API level: POST /api/sentinel/resolve with valid passphrase but missing action_digest yields 400.",
+          "full_docstring": "API level: POST /api/sentinel/resolve with valid passphrase but missing action_digest yields 400.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_08_api_level_valid_passphrase_and_matching_digest_succeeds",
+          "docstring": "API level: POST /api/sentinel/resolve with correct passphrase and matching action_digest succeeds.",
+          "full_docstring": "API level: POST /api/sentinel/resolve with correct passphrase and matching action_digest succeeds.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_09_firetv_glass_cannot_approve",
+          "docstring": "Fire TV Glass bearer token cannot approve even if passphrase was supplied.",
+          "full_docstring": "Fire TV Glass bearer token cannot approve even if passphrase was supplied.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_10_tls_and_pinned_handshake_negative_validation",
+          "docstring": "Negative test for client TLS pin enforcement: rejects empty, null, or mismatched pin.",
+          "full_docstring": "Negative test for client TLS pin enforcement: rejects empty, null, or mismatched pin.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 10
+    },
+    {
+      "module": "test_restore_coordination_and_writer_lock",
+      "class": "TestRestoreCoordinationAndWriterLock",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_restore_coordination_and_writer_lock.py",
+      "tests": [
+        {
+          "test_name": "test_01_active_writer_blocked_during_maintenance",
+          "docstring": "Active writers calling get_connection or log_audit_event during maintenance raise OperationalError.",
+          "full_docstring": "Active writers calling get_connection or log_audit_event during maintenance raise OperationalError.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_02_overlapping_restore_blocked",
+          "docstring": "Concurrent overlapping restore attempts return OVERLAPPING_RESTORE_BLOCKED.",
+          "full_docstring": "Concurrent overlapping restore attempts return OVERLAPPING_RESTORE_BLOCKED.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_03_clean_restore_and_maintenance_release",
+          "docstring": "A complete restore finishes cleanly and releases maintenance mode.",
+          "full_docstring": "A complete restore finishes cleanly and releases maintenance mode.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_active_writer_causes_quiescence_failure_and_aborts_restore",
+          "docstring": "Active writers holding locks cause quiescence failure; restore aborts without modifying target.",
+          "full_docstring": "Active writers holding locks cause quiescence failure; restore aborts without modifying target.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 4
+    },
+    {
+      "module": "test_stage1_security",
+      "class": "TestStage1Security",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_stage1_security.py",
+      "tests": [
+        {
+          "test_name": "test_auth_token_expiration",
+          "docstring": "Expired tokens must be rejected.",
+          "full_docstring": "Expired tokens must be rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_auth_token_issuance_and_verification",
+          "docstring": "Test cryptographic bearer token issuance and constant-time verification.",
+          "full_docstring": "Test cryptographic bearer token issuance and constant-time verification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_auth_token_revocation",
+          "docstring": "Revoked tokens must be permanently rejected.",
+          "full_docstring": "Revoked tokens must be permanently rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_auth_token_tampering_rejected",
+          "docstring": "Tampered tokens must be cryptographically rejected.",
+          "full_docstring": "Tampered tokens must be cryptographically rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_cryptographic_signed_execution_order",
+          "docstring": "Test HMAC-SHA256 signed execution order generation and verification.",
+          "full_docstring": "Test HMAC-SHA256 signed execution order generation and verification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_firetv_safe_denial_permitted",
+          "docstring": "Fire TV is allowed to safely deny/cancel requests.",
+          "full_docstring": "Fire TV is allowed to safely deny/cancel requests.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_consequential_operation_sentinel_hold",
+          "docstring": "Consequential operations halt at Sentinel Gate when request_id is not provided.",
+          "full_docstring": "Consequential operations halt at Sentinel Gate when request_id is not provided.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_forge_metacharacter_injection_rejected",
+          "docstring": "Shell injection attempts in arguments are strictly rejected.",
+          "full_docstring": "Shell injection attempts in arguments are strictly rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_forge_typed_execution_safe",
+          "docstring": "Safe allowlisted operations run with shell=False without Sentinel hold.",
+          "full_docstring": "Safe allowlisted operations run with shell=False without Sentinel hold.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_persistent_kill_switch_blocks_operations",
+          "docstring": "Persistent kill switch halts orders and typed Forge executions.",
+          "full_docstring": "Persistent kill switch halts orders and typed Forge executions.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_poco_only_approval_authority",
+          "docstring": "POCO_CORE can approve, but FIRETV_GLASS is strictly rejected when attempting approval.",
+          "full_docstring": "POCO_CORE can approve, but FIRETV_GLASS is strictly rejected when attempting approval.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_sanctuary_mode_persistence_and_policy",
+          "docstring": "Sanctuary mode persistently engages and blocks tool executions.",
+          "full_docstring": "Sanctuary mode persistently engages and blocks tool executions.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_sentinel_rejection_of_already_resolved",
+          "docstring": "Attempting to resolve an already-resolved request must be atomically rejected.",
+          "full_docstring": "Attempting to resolve an already-resolved request must be atomically rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_sentinel_rejection_of_expired_request",
+          "docstring": "Expired Sentinel requests must be rejected.",
+          "full_docstring": "Expired Sentinel requests must be rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_sentinel_strict_boolean_validation",
+          "docstring": "Passing non-boolean for approved must be rejected.",
+          "full_docstring": "Passing non-boolean for approved must be rejected.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_signed_order_replay_attack_prevention",
+          "docstring": "A consumed execution order nonce cannot be replayed.",
+          "full_docstring": "A consumed execution order nonce cannot be replayed.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_signed_order_tampering_detected",
+          "docstring": "Tampering with parameters or mission scope invalidates the cryptographic order.",
+          "full_docstring": "Tampering with parameters or mission scope invalidates the cryptographic order.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 17
+    },
+    {
+      "module": "test_stage2_correctness",
+      "class": "TestStage2BackendCorrectness",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_stage2_correctness.py",
+      "tests": [
+        {
+          "test_name": "test_aadya_priority_with_hardware_context",
+          "docstring": "AADYA incorporates live RAM and security context into betterment evaluation.",
+          "full_docstring": "AADYA incorporates live RAM and security context into betterment evaluation.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_analyst_semantic_entity_linking",
+          "docstring": "Analyst builds semantic relationships (subnet, domain) instead of sequential order.",
+          "full_docstring": "Analyst builds semantic relationships (subnet, domain) instead of sequential order.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_audit_chain_full_cryptographic_verification",
+          "docstring": "Verifies genesis-to-tip SHA-256 hash chaining and tampering detection.",
+          "full_docstring": "Verifies genesis-to-tip SHA-256 hash chaining and tampering detection.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_audit_chain_tamper_detection",
+          "docstring": "Intentionally tampers with a test database copy and confirms verifier catches it.",
+          "full_docstring": "Intentionally tampers with a test database copy and confirms verifier catches it.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_builder_and_forge_schema_alignment",
+          "docstring": "Builder correctly consumes Forge's risk and risk_assessment schemas without KeyError.",
+          "full_docstring": "Builder correctly consumes Forge's risk and risk_assessment schemas without KeyError.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_council_adversarial_deliberation",
+          "docstring": "Council allows disagreement, catches ambiguity, and generates genuine verdicts.",
+          "full_docstring": "Council allows disagreement, catches ambiguity, and generates genuine verdicts.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_ghost_telemetry_and_stated_assumptions",
+          "docstring": "GHOST synchronizes with live database and provides stated assumptions for faults.",
+          "full_docstring": "GHOST synchronizes with live database and provides stated assumptions for faults.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_nexus_room_live_synchronization",
+          "docstring": "NEXUS ROOM topology renders live synchronized devices, agents, and disturbances.",
+          "full_docstring": "NEXUS ROOM topology renders live synchronized devices, agents, and disturbances.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_oracle_multi_source_and_prediction_ledger",
+          "docstring": "Oracle queries multi-source vault, calibrates uncertainty, and persists to ledger.",
+          "full_docstring": "Oracle queries multi-source vault, calibrates uncertainty, and persists to ledger.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_orchestrator_state_persistence_and_stage_failure_halt",
+          "docstring": "Orchestrator persists state in SQLite, enforces step limits, and halts on failed stages.",
+          "full_docstring": "Orchestrator persists state in SQLite, enforces step limits, and halts on failed stages.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_paradox_quantified_hardware_modeling",
+          "docstring": "PARADOX computes trade-off matrix using hardware benchmarks instead of static percentages.",
+          "full_docstring": "PARADOX computes trade-off matrix using hardware benchmarks instead of static percentages.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_shared_request_pipeline_fast_path_and_concurrency",
+          "docstring": "process_intent_pipeline handles Fast-Path and correlation IDs correctly.",
+          "full_docstring": "process_intent_pipeline handles Fast-Path and correlation IDs correctly.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_signal_dynamic_anomaly_detection",
+          "docstring": "SIGNAL computes dynamic anomaly scores from real database error rates.",
+          "full_docstring": "SIGNAL computes dynamic anomaly scores from real database error rates.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_skeptic_adversarial_evidence_evaluation",
+          "docstring": "Skeptic validates real vault hashes and rejects ungrounded speculation or cloud leaks.",
+          "full_docstring": "Skeptic validates real vault hashes and rejects ungrounded speculation or cloud leaks.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 14
+    },
+    {
+      "module": "test_stage3_disaster_recovery",
+      "class": "TestStage3DisasterRecovery",
+      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_stage3_disaster_recovery.py",
+      "tests": [
+        {
+          "test_name": "test_backup_verification_and_hash_comparison",
+          "docstring": "Verifies backup passes AEAD tag check, checksum comparison, and audit chain verification.",
+          "full_docstring": "Verifies backup passes AEAD tag check, checksum comparison, and audit chain verification.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_emergency_recovery_key",
+          "docstring": "Generates high-entropy recovery key with verifiable checksum.",
+          "full_docstring": "Generates high-entropy recovery key with verifiable checksum.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_encrypted_backup_creation_and_manifest",
+          "docstring": "Creates AES-256-GCM encrypted backup with embedded manifest and tip hash.",
+          "full_docstring": "Creates AES-256-GCM encrypted backup with embedded manifest and tip hash.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_isolated_disaster_recovery_restore",
+          "docstring": "Demonstrates complete disaster recovery into an isolated environment after simulated host loss.",
+          "full_docstring": "Demonstrates complete disaster recovery into an isolated environment after simulated host loss.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_path_traversal_zip_bomb_defense",
+          "docstring": "Confirms _safe_extract rejects malicious archives with path traversal or symlinks.",
+          "full_docstring": "Confirms _safe_extract rejects malicious archives with path traversal or symlinks.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_storage_retention_enforcement",
+          "docstring": "Enforces maximum backup count and purges oldest archives.",
+          "full_docstring": "Enforces maximum backup count and purges oldest archives.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_tampered_backup_rejection",
+          "docstring": "Confirms modified ciphertext fails AES-GCM authentication and is rejected.",
+          "full_docstring": "Confirms modified ciphertext fails AES-GCM authentication and is rejected.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 7
+    }
+  ]
+}

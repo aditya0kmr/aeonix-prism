@@ -63,11 +63,25 @@ class TestPhase4PanoptesAndGuardian(unittest.TestCase):
         dns = passive_dns_recon("127.0.0.1")
         self.assertEqual(dns["domain"], "127.0.0.1")
 
-        # Test HTTP fingerprint against Core Mind server
-        fp = http_fingerprint("http://127.0.0.1:8080/api/status", timeout=2.0)
-        self.assertEqual(fp["status_code"], 200)
-        self.assertIn("server", fp)
-        self.assertIn("uvicorn", fp["server"].lower())
+        from unittest.mock import patch, MagicMock
+        with patch("httpx.Client") as mock_client_cls:
+            mock_client = mock_client_cls.return_value.__enter__.return_value
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.headers = {
+                "server": "uvicorn",
+                "strict-transport-security": "max-age=31536000",
+                "content-security-policy": "default-src 'self'"
+            }
+            mock_client.get.return_value = mock_resp
+
+            # Test HTTP fingerprint against Core Mind server
+            fp = http_fingerprint("http://127.0.0.1:8080/api/status", timeout=2.0)
+            self.assertEqual(fp["status_code"], 200)
+            self.assertIn("server", fp)
+            self.assertIn("uvicorn", fp["server"].lower())
+            self.assertTrue(fp["hsts"])
+            self.assertTrue(fp["csp"])
 
     def test_panoptes_osint_report_generator(self):
         """Test automated OSINT dossier generation, security finding calculation, and audit logging."""

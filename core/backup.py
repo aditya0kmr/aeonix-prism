@@ -403,6 +403,49 @@ def verify_backup(archive_path: str, recovery_passphrase: Optional[str] = None, 
         shutil.rmtree(verify_dir, ignore_errors=True)
 
 
+def _quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[bool, Optional[str]]:
+    """
+    Stops and drains active SQLite writers, verifies WAL checkpointing, and enforces quiescence.
+    Returns (True, None) if quiescence is successfully achieved, or (False, error_msg) to abort restore.
+    """
+    if not os.path.exists(target_db_path):
+        return True, None
+
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        conn = None
+        try:
+            conn = sqlite3.connect(target_db_path, timeout=1.0)
+            conn.execute("PRAGMA busy_timeout = 1000;")
+            conn.execute("PRAGMA locking_mode = EXCLUSIVE;")
+            chk = conn.execute("PRAGMA wal_checkpoint(TRUNCATE);").fetchone()
+            if chk and chk[0] != 0:
+                conn.close()
+                time.sleep(0.1)
+                continue
+
+            conn.execute("BEGIN EXCLUSIVE;")
+            conn.execute("COMMIT;")
+            conn.close()
+            return True, None
+        except sqlite3.OperationalError:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            time.sleep(0.1)
+        except Exception as e:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            return False, f"QUIESCENCE_ERROR: {str(e)}"
+
+    return False, "QUIESCENCE_TIMEOUT: Active database writers failed to drain within timeout"
+
+
 def restore_vault_backup(
     archive_path: str,
     target_db_path: str = DB_PATH,
@@ -494,17 +537,15 @@ def restore_vault_backup(
             manifest = json.load(f)
         extracted_db = os.path.join(restore_dir, manifest.get("db_file", "aeonix_vault.db"))
 
-        # Step 2: Active-writer coordination and comprehensive safety rollback snapshot
+        # Step 2: Stop/drain existing writers & enforce database quiescence (Item 3)
         if os.path.exists(target_db_path):
-            temp_c = sqlite3.connect(target_db_path, timeout=5.0)
-            try:
-                temp_c.execute("PRAGMA locking_mode = EXCLUSIVE;")
-                temp_c.execute("PRAGMA wal_checkpoint(TRUNCATE);")
-                temp_c.execute("BEGIN EXCLUSIVE;")
-            except Exception:
-                pass
-            finally:
-                temp_c.close()
+            quiesced, quiesce_err = _quiesce_database(target_db_path, timeout=5.0)
+            if not quiesced:
+                return {
+                    "success": False,
+                    "status": "RESTORE_ABORTED_QUIESCENCE_FAILED",
+                    "error": f"RESTORE_ABORTED: Active database writers could not be drained: {quiesce_err}"
+                }
 
             safety_dir = f"{target_db_path}.safety_rollback_{int(time.time())}"
             os.makedirs(safety_dir, exist_ok=True)

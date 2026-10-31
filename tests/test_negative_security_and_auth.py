@@ -35,6 +35,7 @@ from aeonix.core.db import (
     claim_sentinel_authorization,
     complete_sentinel_execution,
     check_sentinel_authorization,
+    compute_action_digest,
     log_audit_event,
     verify_audit_chain,
     get_connection
@@ -105,8 +106,9 @@ class TestNegativeSecurityAndAuth(unittest.TestCase):
             ttl_seconds=300,
             db_path=self.db_path
         )
-        # Legitimate POCO approval
-        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, db_path=self.db_path)
+        # Legitimate POCO approval with exact action digest
+        digest = compute_action_digest(req_id, "FORGE", "TYPED_OP_FILE_REMOVE", "rm file_remove", {"target": "temp.txt"})
+        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, expected_action_digest=digest, db_path=self.db_path)
         self.assertTrue(ok)
 
         # Attempt to consume with altered target
@@ -131,7 +133,8 @@ class TestNegativeSecurityAndAuth(unittest.TestCase):
             ttl_seconds=300,
             db_path=self.db_path
         )
-        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, db_path=self.db_path)
+        digest = compute_action_digest(req_id, "FORGE", "TYPED_OP_FILE_REMOVE", "rm file_remove", {"target": "temp.txt"})
+        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, expected_action_digest=digest, db_path=self.db_path)
         self.assertTrue(ok)
 
         # First consumption: SUCCESS
@@ -166,7 +169,8 @@ class TestNegativeSecurityAndAuth(unittest.TestCase):
             ttl_seconds=1, # 1 second TTL
             db_path=self.db_path
         )
-        resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, db_path=self.db_path)
+        digest = compute_action_digest(req_id, "SYSTEM", "TEST_EXPIRE", "test_target", {"test": True})
+        resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, expected_action_digest=digest, db_path=self.db_path)
 
         # Wait for TTL expiry
         time.sleep(1.2)
@@ -210,7 +214,8 @@ class TestNegativeSecurityAndAuth(unittest.TestCase):
             db_path=self.db_path
         )
         # POCO approval
-        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, db_path=self.db_path)
+        digest = compute_action_digest(req_id, "FORGE", "TYPED_OP_FILE_REMOVE", "file_remove /tmp/safe/temp_a.txt", {"cwd": "/tmp/safe", "extra_args": ["temp_a.txt"]})
+        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, expected_action_digest=digest, db_path=self.db_path)
         self.assertTrue(ok)
 
         # 1. Attempt to claim with modified extra_args (temp_b.txt)
@@ -253,7 +258,8 @@ class TestNegativeSecurityAndAuth(unittest.TestCase):
             db_path=self.db_path
         )
         # Simulate approval granted by POCO
-        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, db_path=self.db_path)
+        digest = compute_action_digest(req_id, "FORGE", "TYPED_OP_FILE_REMOVE", exact_target, expected_scope)
+        ok, _ = resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, expected_action_digest=digest, db_path=self.db_path)
         self.assertTrue(ok)
 
         # Execute Forge operation with valid request_id
@@ -297,7 +303,8 @@ class TestNegativeSecurityAndAuth(unittest.TestCase):
         self.assertEqual(cur.fetchone()["status"], "pending")
 
         # 2. Approve
-        resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, db_path=self.db_path)
+        digest = compute_action_digest(req_id, "TEST", "TEST_OP", "target_lifecycle", {"test": True})
+        resolve_sentinel_request(req_id, approved=True, resolver="Aadi", resolver_role=ROLE_POCO_CORE, passphrase_verified=True, expected_action_digest=digest, db_path=self.db_path)
         cur.execute("SELECT status FROM sentinel_requests WHERE id = ?;", (req_id,))
         self.assertEqual(cur.fetchone()["status"], "approved")
 
