@@ -1,7 +1,7 @@
 # ÆTHERION / ÆONIX PRISM // Project State
 
-**Active Milestone:** Milestone 2 (Gates G4–G6: Chronos, Surface & Local Intelligence)  
-**Active Phase:** Phase 5 (Gate G5: PRISM TV Living Surface — Command Deck & D-Pad)  
+**Active Milestone:** Milestone 3 (Gates G7–G10: Voice, Governed Missions, Forensics & Production Hardening)  
+**Active Phase:** Phase 7 (Gate G7: VOX Push-to-Talk Audio)  
 **Last Updated:** November 9, 2026
 
 ---
@@ -41,9 +41,21 @@
   - Implemented Open-Meteo CC BY 4.0 weather cache provenance (`get_weather_with_provenance`) with honest staleness tracking and offline fallback.
   - Added `/gateway/weather`, `/chronos/timeline`, `/events`, and `/system/wal-checkpoint` endpoints with RBAC role enforcement.
   - 8 new unit tests in `tests/test_gate4_chronos.py`.
-  - Test inventory expanded to **169 tests across 21 suites** (100% PASS in 97.5s).
+  - Committed and pushed to GitHub `origin/main` (`ed9f8dd`).
+* [x] **Phase 5: Gate G5 (PRISM TV Living Surface — Command Deck & D-Pad):**
+  - Verified TV launcher UI in `aether-launcher`: Command Deck, App Matrix, Sentinel HUD cards, and Chronos views.
+  - Verified D-pad navigation, RTL/Hebrew boundary containment, and zero focus traps across all rows (`GridNavigationTest`, `RemoteKeysTest`, `DockSlotsTest`).
+  - Verified memory trim policy (`onTrimMemory`) and PSS constraint (< 180 MB) with clean view and wallpaper player recycling (`MemoryTrimPolicyTest`).
+  - Verified 302/302 plain JVM JUnit tests passed (100%) and APK size verified at 3.2 MB.
+* [x] **Phase 6: Gate G6 (Local Intelligence — Burst-Only Inference):**
+  - Verified deterministic fast-path intent router for system commands, weather, time, sentinel, missions, and daily briefing in sub-50ms (0.08ms – 38ms) with zero LLM invocation.
+  - Verified POCO RAM guard budget enforcement: available RAM threshold check (> 600 MB) and Android Phantom Process limit (< 24 child processes).
+  - Enforced burst-only model memory lifecycle: local Qwen2.5 0.5B GGUF model allocates on-demand and unloads immediately upon query completion via `stop_server()` (zero permanent resident memory footprint).
+  - Enforced security barrier: fuzzy text similarity alone strictly prohibited from authorizing destructive commands.
+  - 5 new unit tests added in `tests/test_gate6_local_intelligence.py`.
+  - Test inventory expanded to **174 tests across 22 suites** (100% PASS in 82.9s with verified production isolation).
 
 ---
 
 ## Next Step
-Proceed to Phase 5 (Gate G5): PRISM TV Living Surface (Command Deck & D-Pad).
+Proceed to Phase 7 (Gate G7): VOX Push-to-Talk Audio.

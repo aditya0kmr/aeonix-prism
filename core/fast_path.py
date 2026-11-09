@@ -4,6 +4,7 @@ import difflib
 from typing import Optional, Dict, Any, Tuple
 from aeonix.core.ram_guard import check_ram_guard
 from aeonix.core.db import get_connection
+from aeonix.core.atlas import atlas
 
 # Fast-path normalized triggers
 COMMAND_TRIGGERS = {
@@ -175,7 +176,6 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
         screen = "command_deck"
 
     elif action == "weather":
-        from core.atlas import atlas
         w = atlas.get_weather_intel()
         temp = w.get("temperature_c", 24)
         wind = w.get("windspeed_kmh", 8)
@@ -533,6 +533,7 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
     elapsed_ms = round((time.perf_counter() - start_t) * 1000, 2)
 
     res = {
+        "success": True,
         "tier": "Tier 0 (Fast-Path Router)",
         "action": action,
         "latency_ms": elapsed_ms,

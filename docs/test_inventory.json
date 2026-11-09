@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T09:21:17Z",
-  "total_test_suites": 21,
-  "total_test_cases": 169,
+  "generated_at": "2026-11-09T09:56:03Z",
+  "total_test_suites": 22,
+  "total_test_cases": 174,
   "suites": [
     {
       "module": "test_agents",
@@ -244,6 +244,44 @@
         }
       ],
       "test_count": 8
+    },
+    {
+      "module": "test_gate6_local_intelligence",
+      "class": "TestGate6LocalIntelligence",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_gate6_local_intelligence.py",
+      "tests": [
+        {
+          "test_name": "test_01_deterministic_fast_path_latency_budget",
+          "docstring": "Verify deterministic commands route sub-50ms without invoking any LLM.",
+          "full_docstring": "Verify deterministic commands route sub-50ms without invoking any LLM.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_ram_guard_controller_budget_enforcement",
+          "docstring": "Verify RAM guard verifies available RAM and child process limits before inference.",
+          "full_docstring": "Verify RAM guard verifies available RAM and child process limits before inference.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_burst_only_model_memory_lifecycle",
+          "docstring": "Verify local model allocates on query, generates response, and unloads immediately.",
+          "full_docstring": "Verify local model allocates on query, generates response, and unloads immediately.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_fuzzy_matching_security_barrier",
+          "docstring": "Master Spec Mandate (Section 12):",
+          "full_docstring": "Master Spec Mandate (Section 12):\n'Fuzzy text similarity alone must never authorize an install, deletion or security action.'",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_http_intent_api_endpoint",
+          "docstring": "Verifies POST /api/intent HTTP endpoint latency, response, and RBAC.",
+          "full_docstring": "Verifies POST /api/intent HTTP endpoint latency, response, and RBAC.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 5
     },
     {
       "module": "test_hybrid_router_and_ai",

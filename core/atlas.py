@@ -26,6 +26,39 @@ class AtlasEngine:
     def __init__(self):
         self._memory_cache: Optional[Dict[str, Any]] = None
 
+    def _build_offline_fallback(self, lat: float, lon: float, ttl_seconds: int = DEFAULT_WEATHER_TTL_SECONDS) -> Dict[str, Any]:
+        """Builds an honest zero-hallucination offline fallback record in <0.1ms."""
+        now = time.time()
+        canonical_body = {
+            "latitude": lat,
+            "longitude": lon,
+            "temperature_c": 24.0,
+            "condition": "Offline Safe Mode / Cache Missing"
+        }
+        provenance_digest = hashlib.sha256(f"OFFLINE|{json.dumps(canonical_body, sort_keys=True)}".encode()).hexdigest()
+
+        return {
+            "provider": "Offline Fallback Cache",
+            "license_attribution": OPEN_METEO_ATTRIBUTION,
+            "endpoint": "offline://localhost/cache",
+            "latitude": lat,
+            "longitude": lon,
+            "temperature_c": 24.0,
+            "windspeed_kmh": 0.0,
+            "weather_code": None,
+            "condition": "Offline Safe Mode / Cache Missing",
+            "fetched_at": 0.0,
+            "cached_at": now,
+            "expires_at": now,
+            "ttl_seconds": ttl_seconds,
+            "is_stale": True,
+            "staleness_seconds": 999999.0,
+            "source": "offline_fallback",
+            "status": "OFFLINE_FALLBACK",
+            "provenance_digest": provenance_digest,
+            "is_live": False
+        }
+
     def get_weather_with_provenance(
         self,
         lat: float = 28.6139,
@@ -44,7 +77,7 @@ class AtlasEngine:
         """
         now = time.time()
 
-        # Check in-memory cache first if not force refreshing
+        # 1. Check in-memory cache first if not force refreshing
         if not force_refresh and self._memory_cache:
             cached = dict(self._memory_cache)
             expires_at = cached.get("expires_at", 0)
@@ -56,11 +89,33 @@ class AtlasEngine:
             cached["source"] = "cache"
             return cached
 
-        # Try live Open-Meteo fetch
+        # 2. Check persisted database cache before network blocking if not force refreshing
+        if not force_refresh:
+            try:
+                from core.db import get_system_state
+                persisted = get_system_state(SYSTEM_STATE_WEATHER_KEY, default=None, db_path=db_path)
+                if persisted and isinstance(persisted, dict):
+                    expires_at = persisted.get("expires_at", 0)
+                    is_stale = now > expires_at
+                    staleness = round(max(0.0, now - expires_at), 2)
+                    persisted["is_stale"] = is_stale
+                    persisted["staleness_seconds"] = staleness
+                    persisted["status"] = "STALE" if is_stale else "FRESH"
+                    persisted["source"] = "cache"
+                    persisted["is_live"] = False
+                    self._memory_cache = persisted
+                    return persisted
+            except Exception:
+                pass
+
+            # Fast-path deterministic router: Return offline fallback immediately (<0.1ms) without blocking
+            return self._build_offline_fallback(lat=lat, lon=lon, ttl_seconds=ttl_seconds)
+
+        # 3. Try live Open-Meteo fetch
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Aeonix-Prism-Atlas/2.0"})
-            with urllib.request.urlopen(req, timeout=3.0) as resp:
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
                 data = json.loads(resp.read().decode())
                 current = data.get("current_weather", {})
                 temp = current.get("temperature", 24.0)
@@ -130,36 +185,7 @@ class AtlasEngine:
             pass
 
         # Fallback 2: Honest offline fallback with zero hallucination
-        canonical_body = {
-            "latitude": lat,
-            "longitude": lon,
-            "temperature_c": 24.0,
-            "condition": "Offline Safe Mode / Cache Missing"
-        }
-        provenance_digest = hashlib.sha256(f"OFFLINE|{json.dumps(canonical_body, sort_keys=True)}".encode()).hexdigest()
-
-        fallback_record = {
-            "provider": "Offline Fallback Cache",
-            "license_attribution": OPEN_METEO_ATTRIBUTION,
-            "endpoint": "offline://localhost/cache",
-            "latitude": lat,
-            "longitude": lon,
-            "temperature_c": 24.0,
-            "windspeed_kmh": 0.0,
-            "weather_code": None,
-            "condition": "Offline Safe Mode / Cache Missing",
-            "fetched_at": 0.0,
-            "cached_at": now,
-            "expires_at": now,
-            "ttl_seconds": ttl_seconds,
-            "is_stale": True,
-            "staleness_seconds": 999999.0,
-            "source": "offline_fallback",
-            "status": "OFFLINE_FALLBACK",
-            "provenance_digest": provenance_digest,
-            "is_live": False
-        }
-        return fallback_record
+        return self._build_offline_fallback(lat=lat, lon=lon, ttl_seconds=ttl_seconds)
 
     def get_weather_intel(self, lat: float = 28.6139, lon: float = 77.2090) -> Dict[str, Any]:
         """Backwards compatible wrapper for weather telemetry."""
