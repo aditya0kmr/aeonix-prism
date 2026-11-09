@@ -32,10 +32,10 @@
 * **Exit Gate:** Encrypted WebSocket link established; reconnects resync lost state without duplication. [VERIFIED]
 
 ### Phase 4: Gate G4 — Chronos Context, Durable Events & Integrity Proofs
-* [ ] Task 4.1: Durable SQLite event envelope schema validation and WAL checkpointing.
-* [ ] Task 4.2: Audit entry chaining: `hash(versioned record + previous hash)`.
-* [ ] Task 4.3: Weather and external cache provenance with honest staleness indicator.
-* **Exit Gate:** Event journal replay verified; tamper detection flags corrupted events.
+* [x] Task 4.1: Durable SQLite event envelope schema validation and WAL checkpointing (`record_durable_event`, `checkpoint_wal`, `verify_database_integrity`).
+* [x] Task 4.2: Audit entry chaining: `hash(versioned record + previous hash)` and deterministic event replay (`replay_event_journal`, `verify_audit_chain`).
+* [x] Task 4.3: Weather and external cache provenance with honest staleness indicator (Open-Meteo CC BY 4.0, `get_weather_with_provenance`).
+* **Exit Gate:** Event journal replay verified; tamper detection flags corrupted events. [VERIFIED: 169/169 portable tests PASS]
 
 ### Phase 5: Gate G5 — PRISM TV Living Surface (Command Deck & D-Pad)
 * [ ] Task 5.1: Implement Command Deck, App Matrix, Sentinel, Chronos views in Leanback/RecyclerView.

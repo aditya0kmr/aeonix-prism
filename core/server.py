@@ -1253,6 +1253,86 @@ async def get_operator_console(request):
     from aeonix.core.operator_ui import OPERATOR_HTML
     return HTMLResponse(OPERATOR_HTML)
 
+async def get_gateway_weather(request):
+    """
+    Returns open weather telemetry with cryptographic provenance and honest staleness.
+    Allowed for POCO_CORE and FIRETV_GLASS (Master Spec Sections 14 & 19).
+    """
+    try:
+        lat = float(request.query_params.get("lat", 28.6139))
+        lon = float(request.query_params.get("lon", 77.2090))
+        force = request.query_params.get("force_refresh", "false").lower() == "true"
+        from aeonix.core.atlas import atlas
+        data = atlas.get_weather_with_provenance(lat=lat, lon=lon, force_refresh=force)
+        return JSONResponse({"success": True, "weather": data})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_chronos_timeline(request):
+    """
+    Returns durable event journal replay with sequence-based pagination and integrity validation.
+    """
+    try:
+        start_seq = int(request.query_params.get("start_sequence", 1))
+        limit = min(int(request.query_params.get("limit", 100)), 500)
+        from aeonix.core.db import replay_event_journal
+        res = replay_event_journal(start_sequence=start_seq, limit=limit)
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_events(request):
+    """
+    Ingests a durable event envelope with strict schema validation and safety bounds.
+    """
+    try:
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        event_id = body.get("event_id")
+        schema_version = body.get("schema_version", "1.0.0")
+        observed_at = float(body.get("observed_at", time.time()))
+        device_id = body.get("device_id", "unknown_device")
+        source = body.get("source", "api")
+        event_type = body.get("event_type", "generic")
+        subject = body.get("subject", "system")
+        payload = body.get("payload", {})
+        classification = body.get("classification", "R1")
+        evidence_refs = body.get("evidence_refs", [])
+        correlation_id = body.get("correlation_id")
+
+        from aeonix.core.db import record_durable_event
+        ok, record, msg = record_durable_event(
+            event_id=event_id,
+            schema_version=schema_version,
+            observed_at=observed_at,
+            device_id=device_id,
+            source=source,
+            event_type=event_type,
+            subject=subject,
+            payload=payload,
+            classification=classification,
+            evidence_refs=evidence_refs,
+            correlation_id=correlation_id
+        )
+        if not ok:
+            status_code = 409 if "DUPLICATE" in msg else 400
+            return JSONResponse({"error": msg}, status_code=status_code)
+        return JSONResponse({"success": True, "event": record})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_wal_checkpoint(request):
+    """
+    Triggers controlled SQLite WAL checkpoint (POCO_CORE only).
+    """
+    try:
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        mode = body.get("mode", "PASSIVE")
+        from aeonix.core.db import checkpoint_wal
+        res = checkpoint_wal(mode=mode)
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 PUBLIC_ENDPOINTS = {
     ("GET", "/api/status"),
 }
@@ -1270,6 +1350,10 @@ FIRETV_ALLOWED_ENDPOINTS = {
     ("POST", "/api/media/play"),
     ("POST", "/api/media/control"),
     ("GET", "/api/sanctuary/status"),
+    ("GET", "/gateway/weather"),
+    ("GET", "/api/gateway/weather"),
+    ("GET", "/chronos/timeline"),
+    ("GET", "/api/chronos/timeline"),
 }
 
 AGENT_ALLOWED_ENDPOINTS = {
@@ -1278,6 +1362,8 @@ AGENT_ALLOWED_ENDPOINTS = {
     ("POST", "/api/agents/dispatch"),
     ("POST", "/api/memory/remember"),
     ("GET", "/api/memory/recall"),
+    ("POST", "/events"),
+    ("POST", "/api/events"),
 }
 
 class CentralAuthMiddleware(BaseHTTPMiddleware):
@@ -1455,6 +1541,14 @@ app = Starlette(
         Route("/api/advanced/signal", get_advanced_signal, methods=["GET"]),
         Route("/api/advanced/forge-mind", post_advanced_forge_mind, methods=["POST"]),
         Route("/api/advanced/nexus-room", get_advanced_nexus_room, methods=["GET"]),
+        Route("/gateway/weather", get_gateway_weather, methods=["GET"]),
+        Route("/api/gateway/weather", get_gateway_weather, methods=["GET"]),
+        Route("/chronos/timeline", get_chronos_timeline, methods=["GET"]),
+        Route("/api/chronos/timeline", get_chronos_timeline, methods=["GET"]),
+        Route("/events", post_events, methods=["POST"]),
+        Route("/api/events", post_events, methods=["POST"]),
+        Route("/system/wal-checkpoint", post_wal_checkpoint, methods=["POST"]),
+        Route("/api/system/wal-checkpoint", post_wal_checkpoint, methods=["POST"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     middleware=middleware,

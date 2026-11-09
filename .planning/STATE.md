@@ -1,8 +1,7 @@
 # ÆTHERION / ÆONIX PRISM // Project State
 
-**Active Milestone:** Milestone 1 Complete (Gates G0–G3: Foundation & Core Connection)  
-**Next Milestone:** Milestone 2 (Gates G4–G6: Chronos, Surface & Local Intelligence)  
-**Active Phase:** Phase 4 (Gate G4: Chronos Context, Durable Events & Integrity Proofs)  
+**Active Milestone:** Milestone 2 (Gates G4–G6: Chronos, Surface & Local Intelligence)  
+**Active Phase:** Phase 5 (Gate G5: PRISM TV Living Surface — Command Deck & D-Pad)  
 **Last Updated:** November 9, 2026
 
 ---
@@ -33,10 +32,18 @@
   - Monotonic server sequence stamping (`_SERVER_SEQUENCE`) on broadcast messages.
   - Ring buffer and sequence-based resynchronization (`sync_request` / `sync_response`) replaying missed state on reconnect.
   - 6 new unit tests added in `tests/test_gate3_transport_and_sync.py`.
-  - Test inventory expanded to 161 tests across 20 suites.
-  - Full portable test suite 100% passed (161/161 in 58.7s) with bit-for-bit production isolation.
+  - Committed and pushed to GitHub `origin/main` (`a3f5744`).
+* [x] **Phase 4: Gate G4 (Chronos Context, Durable Events & Integrity Proofs):**
+  - Implemented durable `events` table with schema versioning (`1.0.0`), monotonic server sequence, and 32 KiB payload ceiling bounding.
+  - Created `record_durable_event` with anti-replay duplicate prevention and SHA-256 payload hashing.
+  - Implemented deterministic `replay_event_journal` with automatic sequence monotonicity and payload tamper detection.
+  - Added controlled SQLite WAL checkpointing (`checkpoint_wal` supporting PASSIVE, FULL, TRUNCATE) and database integrity checks (`verify_database_integrity` with quick_check & full_integrity_check).
+  - Implemented Open-Meteo CC BY 4.0 weather cache provenance (`get_weather_with_provenance`) with honest staleness tracking and offline fallback.
+  - Added `/gateway/weather`, `/chronos/timeline`, `/events`, and `/system/wal-checkpoint` endpoints with RBAC role enforcement.
+  - 8 new unit tests in `tests/test_gate4_chronos.py`.
+  - Test inventory expanded to **169 tests across 21 suites** (100% PASS in 97.5s).
 
 ---
 
 ## Next Step
-Proceed to Phase 4 (Gate G4): Chronos Context, Durable Events & Integrity Proofs.
+Proceed to Phase 5 (Gate G5): PRISM TV Living Surface (Command Deck & D-Pad).

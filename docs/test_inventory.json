@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T09:02:24Z",
-  "total_test_suites": 20,
-  "total_test_cases": 161,
+  "generated_at": "2026-11-09T09:21:17Z",
+  "total_test_suites": 21,
+  "total_test_cases": 169,
   "suites": [
     {
       "module": "test_agents",
@@ -188,6 +188,62 @@
         }
       ],
       "test_count": 6
+    },
+    {
+      "module": "test_gate4_chronos",
+      "class": "TestGate4ChronosAndIntegrity",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_gate4_chronos.py",
+      "tests": [
+        {
+          "test_name": "test_01_event_envelope_schema_validation",
+          "docstring": "Verifies valid event envelope ingestion and rejection of invalid schema versions.",
+          "full_docstring": "Verifies valid event envelope ingestion and rejection of invalid schema versions.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_02_oversized_payload_rejection_ceiling",
+          "docstring": "Strictly enforces 32 KiB safety ceiling for event payloads.",
+          "full_docstring": "Strictly enforces 32 KiB safety ceiling for event payloads.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_03_duplicate_event_prevention_anti_replay",
+          "docstring": "Prevents duplicate event ingestion using unique event_id constraint.",
+          "full_docstring": "Prevents duplicate event ingestion using unique event_id constraint.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_server_sequence_monotonicity_and_replay",
+          "docstring": "Verifies deterministic server sequence stamping and event journal replay.",
+          "full_docstring": "Verifies deterministic server sequence stamping and event journal replay.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_tamper_detection_in_journal_and_audit_chain",
+          "docstring": "Verifies cryptographic tamper detection flags any corrupted payload, sequence, or audit row.",
+          "full_docstring": "Verifies cryptographic tamper detection flags any corrupted payload, sequence, or audit row.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_wal_checkpoint_and_integrity_check",
+          "docstring": "Verifies SQLite WAL checkpointing and quick/full integrity check routines.",
+          "full_docstring": "Verifies SQLite WAL checkpointing and quick/full integrity check routines.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_07_weather_provenance_and_honest_staleness",
+          "docstring": "Verifies Open-Meteo cache provenance, attribution, and honest staleness calculation.",
+          "full_docstring": "Verifies Open-Meteo cache provenance, attribution, and honest staleness calculation.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_08_http_api_endpoints_and_rbac",
+          "docstring": "Verifies Starlette HTTP endpoints for weather, chronos timeline, events, and WAL checkpoint.",
+          "full_docstring": "Verifies Starlette HTTP endpoints for weather, chronos timeline, events, and WAL checkpoint.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 8
     },
     {
       "module": "test_hybrid_router_and_ai",

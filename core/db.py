@@ -3,10 +3,14 @@ import os
 import time
 import json
 import hashlib
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 DB_PATH = os.getenv("AEONIX_DB_PATH", os.path.expanduser("~/aeonix/data/aeonix_vault.db"))
 PROD_DB_PATH = os.path.realpath(os.path.expanduser("~/aeonix/data/aeonix_vault.db"))
+
+SUPPORTED_EVENT_SCHEMA_VERSIONS = {"1.0.0"}
+MAX_EVENT_PAYLOAD_BYTES = 32768  # 32 KiB safety ceiling
+VALID_EVENT_CLASSIFICATIONS = {"R0", "R1", "R2", "R3", "R4", "R5"}
 
 def get_db_path() -> str:
     """Returns dynamic database path respecting test isolation environment variables. Refuses production paths in test mode."""
@@ -262,6 +266,30 @@ def init_database(db_path: Optional[str] = None) -> bool:
         prediction_json TEXT,
         created_at REAL NOT NULL
     );
+
+    -- CHRONOS Durable Event Envelope Journal (Master Spec Section 8)
+    CREATE TABLE IF NOT EXISTS events (
+        event_id TEXT PRIMARY KEY,
+        schema_version TEXT NOT NULL,
+        server_sequence INTEGER UNIQUE NOT NULL,
+        observed_at REAL NOT NULL,
+        received_at REAL NOT NULL,
+        device_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        classification TEXT NOT NULL DEFAULT 'R1',
+        evidence_refs_json TEXT,
+        correlation_id TEXT,
+        payload_hash TEXT NOT NULL,
+        previous_audit_hash TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_sequence ON events(server_sequence);
+    CREATE INDEX IF NOT EXISTS idx_events_received ON events(received_at);
+    CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id);
     """)
 
     # Seed Sovereign User (Aadi) if not present
@@ -906,4 +934,256 @@ def verify_audit_chain(db_path: Optional[str] = None, allow_maintenance: bool = 
         "status": "CRYPTOGRAPHICALLY_VERIFIED",
         "genesis_hash": rows[0]["current_hash"],
         "tip_hash": rows[-1]["current_hash"]
+    }
+
+def record_durable_event(
+    event_id: str,
+    schema_version: str,
+    observed_at: float,
+    device_id: str,
+    source: str,
+    event_type: str,
+    subject: str,
+    payload: Any,
+    classification: str = "R1",
+    evidence_refs: Optional[List[str]] = None,
+    correlation_id: Optional[str] = None,
+    db_path: Optional[str] = None,
+    allow_maintenance: bool = False
+) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    """
+    Persists a durable event envelope to the authoritative journal.
+    Enforces Master Specification Section 8:
+    - Envelope: event_id, schema_version, server_sequence, observed_at, received_at,
+                device_id, source, event_type, subject, payload, classification,
+                evidence_refs, correlation_id, payload_hash, previous_audit_hash.
+    - Strict schema version admission.
+    - Safety ceiling bounding (max 32 KiB payload).
+    - Monotonic server receive sequence stamping.
+    - Unique event ID duplicate rejection (anti-replay).
+    - Cryptographic SHA-256 payload hash & audit chain linkage.
+    """
+    if not isinstance(event_id, str) or not event_id.strip():
+        return False, None, "INVALID_EVENT_ID: event_id must be a non-empty string"
+
+    if schema_version not in SUPPORTED_EVENT_SCHEMA_VERSIONS:
+        return False, None, f"UNSUPPORTED_SCHEMA_VERSION: '{schema_version}' not in supported versions {sorted(list(SUPPORTED_EVENT_SCHEMA_VERSIONS))}"
+
+    if classification not in VALID_EVENT_CLASSIFICATIONS:
+        return False, None, f"INVALID_CLASSIFICATION: '{classification}' not in valid classes {sorted(list(VALID_EVENT_CLASSIFICATIONS))}"
+
+    if not all(isinstance(v, str) and v.strip() for v in [device_id, source, event_type, subject]):
+        return False, None, "INVALID_ENVELOPE_METADATA: device_id, source, event_type, and subject must be non-empty strings"
+
+    if isinstance(payload, str):
+        try:
+            parsed = json.loads(payload)
+            payload_json = json.dumps(parsed, sort_keys=True)
+        except Exception:
+            payload_json = json.dumps({"raw": payload}, sort_keys=True)
+    else:
+        try:
+            payload_json = json.dumps(payload, sort_keys=True)
+        except Exception as e:
+            return False, None, f"PAYLOAD_SERIALIZATION_ERROR: {str(e)}"
+
+    payload_bytes = payload_json.encode("utf-8")
+    if len(payload_bytes) > MAX_EVENT_PAYLOAD_BYTES:
+        return False, None, f"PAYLOAD_TOO_LARGE: Payload {len(payload_bytes)} bytes exceeds 32 KiB safety ceiling ({MAX_EVENT_PAYLOAD_BYTES} bytes)"
+
+    payload_hash = hashlib.sha256(payload_bytes).hexdigest()
+    evidence_refs_json = json.dumps(evidence_refs or [], sort_keys=True)
+    received_at = time.time()
+
+    conn = get_connection(db_path, allow_maintenance=allow_maintenance)
+    cur = conn.cursor()
+    try:
+        cur.execute("BEGIN IMMEDIATE;")
+        # Anti-replay / duplicate prevention
+        cur.execute("SELECT event_id FROM events WHERE event_id = ?;", (event_id,))
+        if cur.fetchone():
+            conn.rollback()
+            conn.close()
+            return False, None, "DUPLICATE_EVENT_ID: Event has already been ingested"
+
+        # Deterministic monotonic server sequence
+        cur.execute("SELECT COALESCE(MAX(server_sequence), 0) + 1 FROM events;")
+        server_sequence = cur.fetchone()[0]
+
+        # Cryptographic link to audit trail
+        cur.execute("SELECT current_hash FROM audit_log ORDER BY id DESC LIMIT 1;")
+        prev_row = cur.fetchone()
+        previous_audit_hash = prev_row["current_hash"] if prev_row else "GENESIS_BLOCK_AEONIX_PRISM_v2.0"
+
+        cur.execute("""
+            INSERT INTO events (
+                event_id, schema_version, server_sequence, observed_at, received_at,
+                device_id, source, event_type, subject, payload_json, classification,
+                evidence_refs_json, correlation_id, payload_hash, previous_audit_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (
+            event_id, schema_version, server_sequence, observed_at, received_at,
+            device_id, source, event_type, subject, payload_json, classification,
+            evidence_refs_json, correlation_id, payload_hash, previous_audit_hash
+        ))
+
+        # Mirror entry into hash-chained audit log
+        log_audit_event(
+            actor=f"{device_id}:{source}",
+            action=f"durable_event:{event_type}",
+            target=subject,
+            result="recorded",
+            details={
+                "event_id": event_id,
+                "server_sequence": server_sequence,
+                "classification": classification,
+                "payload_hash": payload_hash,
+                "correlation_id": correlation_id
+            },
+            db_path=db_path,
+            conn=conn,
+            allow_maintenance=allow_maintenance
+        )
+
+        conn.commit()
+        conn.close()
+
+        event_record = {
+            "event_id": event_id,
+            "schema_version": schema_version,
+            "server_sequence": server_sequence,
+            "observed_at": observed_at,
+            "received_at": received_at,
+            "device_id": device_id,
+            "source": source,
+            "event_type": event_type,
+            "subject": subject,
+            "payload": json.loads(payload_json),
+            "classification": classification,
+            "evidence_refs": json.loads(evidence_refs_json),
+            "correlation_id": correlation_id,
+            "payload_hash": payload_hash,
+            "previous_audit_hash": previous_audit_hash
+        }
+        return True, event_record, "RECORDED"
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return False, None, f"DATABASE_ERROR: {str(e)}"
+
+def replay_event_journal(
+    start_sequence: int = 1,
+    limit: int = 100,
+    db_path: Optional[str] = None,
+    allow_maintenance: bool = False
+) -> Dict[str, Any]:
+    """
+    Deterministically replays the event journal from start_sequence.
+    Cryptographically verifies:
+    1. Server sequence monotonicity (strictly ascending).
+    2. Recalculated payload SHA-256 hash match.
+    Flags any corrupted, mutated, or out-of-order events.
+    """
+    conn = get_connection(db_path, allow_maintenance=allow_maintenance)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT event_id, schema_version, server_sequence, observed_at, received_at,
+               device_id, source, event_type, subject, payload_json, classification,
+               evidence_refs_json, correlation_id, payload_hash, previous_audit_hash
+        FROM events
+        WHERE server_sequence >= ?
+        ORDER BY server_sequence ASC
+        LIMIT ?;
+    """, (start_sequence, limit))
+    rows = cur.fetchall()
+    conn.close()
+
+    events = []
+    last_seq = start_sequence - 1
+    for row in rows:
+        seq = row["server_sequence"]
+        # 1. Monotonicity check
+        if seq <= last_seq:
+            return {
+                "is_valid": False,
+                "error": f"Sequence monotonicity violation at sequence {seq} (previous was {last_seq})",
+                "corrupted_sequence": seq,
+                "corrupted_event_id": row["event_id"]
+            }
+        last_seq = seq
+
+        # 2. Cryptographic payload integrity check
+        recalculated_hash = hashlib.sha256(row["payload_json"].encode("utf-8")).hexdigest()
+        if recalculated_hash != row["payload_hash"]:
+            return {
+                "is_valid": False,
+                "error": f"Payload corruption detected at sequence {seq} (event {row['event_id']})",
+                "corrupted_sequence": seq,
+                "corrupted_event_id": row["event_id"],
+                "expected_hash": row["payload_hash"],
+                "computed_hash": recalculated_hash
+            }
+
+        events.append({
+            "event_id": row["event_id"],
+            "schema_version": row["schema_version"],
+            "server_sequence": seq,
+            "observed_at": row["observed_at"],
+            "received_at": row["received_at"],
+            "device_id": row["device_id"],
+            "source": row["source"],
+            "event_type": row["event_type"],
+            "subject": row["subject"],
+            "payload": json.loads(row["payload_json"]),
+            "classification": row["classification"],
+            "evidence_refs": json.loads(row["evidence_refs_json"]) if row["evidence_refs_json"] else [],
+            "correlation_id": row["correlation_id"],
+            "payload_hash": row["payload_hash"],
+            "previous_audit_hash": row["previous_audit_hash"]
+        })
+
+    return {
+        "is_valid": True,
+        "count": len(events),
+        "start_sequence": start_sequence,
+        "events": events
+    }
+
+def checkpoint_wal(mode: str = "PASSIVE", db_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Executes a controlled SQLite WAL checkpoint.
+    Supported modes: PASSIVE, FULL, RESTART, TRUNCATE.
+    """
+    allowed_modes = {"PASSIVE", "FULL", "RESTART", "TRUNCATE"}
+    mode_upper = mode.upper()
+    if mode_upper not in allowed_modes:
+        raise ValueError(f"Invalid WAL checkpoint mode: {mode}. Allowed: {sorted(list(allowed_modes))}")
+    conn = get_connection(db_path, allow_maintenance=True)
+    cur = conn.cursor()
+    cur.execute(f"PRAGMA wal_checkpoint({mode_upper});")
+    row = cur.fetchone()
+    conn.close()
+    return {
+        "mode": mode_upper,
+        "busy": row[0],
+        "log_frames": row[1],
+        "checkpointed_frames": row[2],
+        "status": "CHECKPOINT_SUCCESS"
+    }
+
+def verify_database_integrity(db_path: Optional[str] = None, full: bool = False) -> Dict[str, Any]:
+    """
+    Performs quick_check (standard startup) or integrity_check (maintenance/audit).
+    """
+    conn = get_connection(db_path, allow_maintenance=True)
+    cur = conn.cursor()
+    pragma = "PRAGMA integrity_check;" if full else "PRAGMA quick_check;"
+    cur.execute(pragma)
+    row = cur.fetchone()
+    check_val = row[0] if row else "unknown"
+    conn.close()
+    return {
+        "check_type": "full_integrity_check" if full else "quick_check",
+        "result": check_val,
+        "is_valid": (check_val == "ok")
     }
