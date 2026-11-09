@@ -454,6 +454,98 @@ async def post_voice_transcribe(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def post_voice_pipeline(request):
+    """
+    Physical POCO Microphone Pipeline:
+    POCO mic capture -> local ASR -> deterministic intent -> policy check -> TV feedback.
+    1. Validates audio buffer and enforces 15s ceiling.
+    2. Runs Voice Activity Detection (VAD).
+    3. Runs offline whisper transcription.
+    4. Evaluates intent and Sentinel authority boundaries (voice cannot approve consequential actions).
+    5. Dispatches layout_intent to Fire TV Living Surface over WebSocket.
+    6. Ensures ephemeral audio cleanup.
+    """
+    try:
+        auth_role, caller = get_request_identity(request)
+        body = await request.body()
+        if not body:
+            return JSONResponse({"error": "EMPTY_AUDIO: Audio payload is empty"}, status_code=400)
+
+        from aeonix.core.stt import detect_voice_activity, transcribe_pcm, MAX_AUDIO_BYTES
+        if len(body) > MAX_AUDIO_BYTES:
+            return JSONResponse({"error": f"AUDIO_PAYLOAD_TOO_LARGE: Audio payload {len(body)} bytes exceeds 15-second safety ceiling ({MAX_AUDIO_BYTES} bytes)"}, status_code=400)
+
+        lang = request.query_params.get("lang") or request.headers.get("X-Whisper-Lang", "en")
+        vad = detect_voice_activity(body)
+        if vad.get("is_silent"):
+            return JSONResponse({
+                "success": True,
+                "status": "SILENCE_REJECTED",
+                "transcription": "",
+                "vad": vad,
+                "speech": "No voice activity detected."
+            })
+
+        loop = asyncio.get_event_loop()
+        transcript = await loop.run_in_executor(heavy_executor, lambda: transcribe_pcm(body, lang=lang))
+        clean_text = transcript.strip() if transcript else ""
+
+        if not clean_text or clean_text.startswith("[STT Error"):
+            await broadcast_message({
+                "type": "voice_feedback",
+                "transcription": clean_text or "[Unintelligible]",
+                "speech": "I could not understand that command, Aadi.",
+                "policy_status": "FALLBACK"
+            })
+            return JSONResponse({
+                "success": False,
+                "status": "ASR_FALLBACK",
+                "transcription": clean_text,
+                "fallback_message": "Could not recognize audio. Please repeat command.",
+                "speech": "I could not understand that command, Aadi.",
+                "tv_feedback_broadcast": True
+            })
+
+        # Sentinel Authority Boundary: Voice CANNOT authorize protected actions!
+        lower_query = clean_text.lower()
+        is_approval_attempt = any(w in lower_query for w in ["approve", "authorize", "confirm", "wipe", "format"])
+        policy_verdict = "ALLOW"
+        policy_notice = None
+
+        if is_approval_attempt:
+            policy_verdict = "DENIED_VOICE_AUTHORIZATION"
+            policy_notice = "VOICE_AUTHORIZATION_PROHIBITED: Consequential approvals strictly require physical operator passphrase entry on POCO."
+            intent_result = {
+                "success": False,
+                "action": "sentinel_voice_blocked",
+                "query": clean_text,
+                "speech": "Voice approval is prohibited. Please enter your operator passphrase on POCO.",
+                "policy_status": policy_verdict,
+                "policy_notice": policy_notice
+            }
+        else:
+            intent_result = await process_intent_pipeline(clean_text, actor=caller, actor_role=auth_role)
+            intent_result["policy_status"] = policy_verdict
+
+        await broadcast_message({
+            "type": "voice_feedback",
+            "transcription": clean_text,
+            "speech": intent_result.get("speech", ""),
+            "policy_status": policy_verdict
+        })
+
+        return JSONResponse({
+            "success": True,
+            "transcription": clean_text,
+            "vad": vad,
+            "intent": intent_result,
+            "tv_feedback_broadcast": True
+        })
+    except ValueError as ve:
+        return JSONResponse({"error": str(ve)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 async def get_voice_model_info_endpoint(request):
     """Returns active and available Whisper model forensic metadata."""
     try:
@@ -1621,6 +1713,8 @@ app = Starlette(
         Route("/api/briefing", get_briefing, methods=["GET"]),
         Route("/api/intent", post_intent, methods=["POST"]),
         Route("/api/voice/transcribe", post_voice_transcribe, methods=["POST"]),
+        Route("/api/voice/pipeline", post_voice_pipeline, methods=["POST"]),
+        Route("/api/voice/process", post_voice_pipeline, methods=["POST"]),
         Route("/api/panoptes/scan", post_panoptes_scan, methods=["POST"]),
         Route("/api/panoptes/graph", get_panoptes_graph, methods=["GET"]),
         Route("/api/panoptes/ingest-note", post_panoptes_ingest_note, methods=["POST"]),

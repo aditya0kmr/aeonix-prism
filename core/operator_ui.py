@@ -156,6 +156,40 @@ OPERATOR_HTML = """<!DOCTYPE html>
       font-size: 13px;
     }
     .status-row:last-child { border-bottom: none; }
+    .btn-ptt {
+      background: var(--surface-light);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+    .btn-ptt.active {
+      background: rgba(224, 93, 82, 0.2);
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+    .pulsing-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--danger);
+      display: inline-block;
+      animation: pttPulse 1s infinite alternate;
+    }
+    @keyframes pttPulse {
+      from { opacity: 0.3; transform: scale(0.8); }
+      to { opacity: 1.0; transform: scale(1.2); }
+    }
     .modal-overlay {
       display: none;
       position: fixed;
@@ -213,6 +247,31 @@ OPERATOR_HTML = """<!DOCTYPE html>
     </div>
     <div id="pending-list">
       <div class="empty-state">Loading pending actions...</div>
+    </div>
+  </div>
+
+  <!-- POCO Voice Push-to-Talk (PTT) Interface -->
+  <div class="card" id="ptt-card">
+    <div class="card-title">POCO Sovereign Voice PTT</div>
+    <div id="ptt-idle-view">
+      <button class="btn-ptt" id="btn-ptt-main" onclick="startPtt()">
+        <span id="ptt-icon">🎙️</span>
+        <span id="ptt-label">Push to Talk (English Voice)</span>
+      </button>
+    </div>
+    <div id="ptt-active-view" style="display: none; margin-top: 10px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <span style="display: flex; align-items: center; gap: 6px; color: var(--danger); font-weight: 600;">
+          <span class="pulsing-dot"></span> RECORDING (<span id="ptt-timer">00:00</span> / 00:15)
+        </span>
+        <button class="btn btn-sm btn-outline" style="border-color: var(--danger); color: var(--danger);" onclick="cancelPtt()">Cancel</button>
+      </div>
+      <button class="btn btn-danger btn-block" onclick="stopPtt()">Release & Process Voice</button>
+    </div>
+    <div id="ptt-result" style="display: none; margin-top: 10px; font-size: 12px; padding: 8px; background: var(--surface-light); border-radius: 6px;">
+      <div style="color: var(--accent); font-weight: 600; margin-bottom: 4px;">Recognized Command:</div>
+      <div id="ptt-transcript" style="color: var(--text);"></div>
+      <div id="ptt-feedback" style="color: var(--text-muted); margin-top: 4px; font-style: italic;"></div>
     </div>
   </div>
 
@@ -379,6 +438,101 @@ OPERATOR_HTML = """<!DOCTYPE html>
       } catch (e) {
         alert(e.message);
       }
+    }
+
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let pttTimerInterval = null;
+    let pttStartTimestamp = 0;
+    let pttIsCancelled = false;
+
+    async function startPtt() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        pttIsCancelled = false;
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) audioChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          clearInterval(pttTimerInterval);
+          document.getElementById('ptt-active-view').style.display = 'none';
+          document.getElementById('ptt-idle-view').style.display = 'block';
+
+          if (pttIsCancelled) {
+            console.log('PTT recording cancelled by user. Zero inference executed.');
+            return;
+          }
+
+          if (audioChunks.length === 0) return;
+          const blob = new Blob(audioChunks, { type: 'audio/wav' });
+          const resDiv = document.getElementById('ptt-result');
+          const transcriptEl = document.getElementById('ptt-transcript');
+          const feedbackEl = document.getElementById('ptt-feedback');
+          resDiv.style.display = 'block';
+          transcriptEl.textContent = 'Processing local whisper speech recognition...';
+          feedbackEl.textContent = '';
+
+          try {
+            const res = await fetch('/api/voice/pipeline', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'audio/wav',
+                'Authorization': 'Bearer POCO_CORE_DEV_TOKEN_AETHERION'
+              },
+              body: blob
+            });
+            const data = await res.json();
+            if (data.success) {
+              transcriptEl.textContent = `"${data.transcription || '[Silence]'}"`;
+              feedbackEl.textContent = `TV HUD Updated: ${data.intent?.speech || 'Command acknowledged.'}`;
+            } else {
+              transcriptEl.textContent = `[Failed] ${data.fallback_message || data.error}`;
+            }
+          } catch (err) {
+            transcriptEl.textContent = `[Error] ${err.message}`;
+          }
+        };
+
+        mediaRecorder.start(250);
+        pttStartTimestamp = Date.now();
+        document.getElementById('ptt-idle-view').style.display = 'none';
+        document.getElementById('ptt-active-view').style.display = 'block';
+        document.getElementById('ptt-result').style.display = 'none';
+
+        pttTimerInterval = setInterval(() => {
+          const elapsedSec = Math.floor((Date.now() - pttStartTimestamp) / 1000);
+          const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+          const ss = String(elapsedSec % 60).padStart(2, '0');
+          document.getElementById('ptt-timer').textContent = `${mm}:${ss}`;
+          if (elapsedSec >= 15) {
+            stopPtt();
+          }
+        }, 500);
+      } catch (err) {
+        alert('Microphone access denied or unavailable: ' + err.message);
+      }
+    }
+
+    function stopPtt() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+    }
+
+    function cancelPtt() {
+      pttIsCancelled = true;
+      stopPtt();
+      document.getElementById('ptt-active-view').style.display = 'none';
+      document.getElementById('ptt-idle-view').style.display = 'block';
+      const resDiv = document.getElementById('ptt-result');
+      resDiv.style.display = 'block';
+      document.getElementById('ptt-transcript').textContent = '[Recording cancelled by operator. No audio sent.]';
+      document.getElementById('ptt-feedback').textContent = '';
     }
 
     function escapeHtml(str) {
