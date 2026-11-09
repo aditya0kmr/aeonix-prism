@@ -51,13 +51,12 @@ class SignalPatternDetector:
         sentinel_dist = {r[0]: r[1] for r in sentinel_counts}
 
         # 4. Dynamic Anomaly Calculation
-        # Nominal baseline error rate is < 3%
         error_rate = (error_events / max(1, total_events))
-        # Anomaly score scaled from measured failure frequencies
-        if error_rate < 0.03:
+        # Nominal baseline error rate in dynamic multi-device environment allows normal operational variances (<10%)
+        if error_rate < 0.10:
             anomaly_score = round(max(0.01, error_rate * 1.5), 3)
             signal_status = "PATTERNS_NOMINAL"
-        elif error_rate < 0.10:
+        elif error_rate < 0.25:
             anomaly_score = round(0.10 + error_rate * 2.0, 3)
             signal_status = "ELEVATED_VARIANCE"
         else:

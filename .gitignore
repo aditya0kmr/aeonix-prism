@@ -1,8 +1,11 @@
 # ÆONIX PRISM .gitignore
 
 # Large binary models (downloaded via download-models.sh)
+models
 models/
+bin
 bin/
+whisper.cpp
 whisper.cpp/
 
 # SQLite Vault databases (created dynamically)

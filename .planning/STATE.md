@@ -1,7 +1,7 @@
 # ÆTHERION / ÆONIX PRISM // Project State
 
 **Active Milestone:** Milestone 3 (Gates G7–G10: Voice, Governed Missions, Forensics & Production Hardening)  
-**Active Phase:** Phase 7 (Gate G7: VOX Push-to-Talk Audio)  
+**Active Phase:** Phase 9 (Gate G9: Forensic & Telemetry Expansion)  
 **Last Updated:** November 9, 2026
 
 ---
@@ -53,9 +53,25 @@
   - Enforced burst-only model memory lifecycle: local Qwen2.5 0.5B GGUF model allocates on-demand and unloads immediately upon query completion via `stop_server()` (zero permanent resident memory footprint).
   - Enforced security barrier: fuzzy text similarity alone strictly prohibited from authorizing destructive commands.
   - 5 new unit tests added in `tests/test_gate6_local_intelligence.py`.
-  - Test inventory expanded to **174 tests across 22 suites** (100% PASS in 82.9s with verified production isolation).
+  - Committed and pushed to GitHub `origin/main` (`2b3b2f7`).
+* [x] **Phase 7: Gate G7 (VOX Push-to-Talk Audio & Offline ASR Pipeline):**
+  - Implemented local Voice Activity Detection (VAD) via RMS energy calculation in `core/stt.py` (`detect_voice_activity`), rejecting silent buffers.
+  - Enforced 15-second audio safety ceiling (`MAX_AUDIO_BYTES = 480,000 bytes`).
+  - Executed 100% offline transcription via `whisper-cli` and `ggml-tiny.en.bin` on Dimensity 810 ARM NEON.
+  - Assessed Fire TV remote mic input architectural constraint (gated by Amazon OEM Fire OS 7 `com.amazon.vsuite.client`).
+  - 5 new unit tests added in `tests/test_gate7_vox_audio.py`.
+  - Test inventory expanded to **179 tests across 23 suites** (100% PASS in 86.7s with verified production isolation).
+* [x] **Phase 8: Gate G8 (First Governed Mission):**
+  - Implemented end-to-end `GovernedMissionController` supporting the 10-state lifecycle: `REQUESTED` -> `COLLECTING` -> `PLANNED` -> `SIMULATED` -> `POLICY_CHECK` -> `AWAITING_APPROVAL` -> `CLAIMED` -> `EXECUTING` -> `VERIFYING` -> `COMPLETED`.
+  - Enforced POCO Core authority, operator passphrase verification, and Action Digest binding for consequential missions.
+  - Single-use token claim preventing replay attacks (`ALREADY_CONSUMED`).
+  - Executed real bounded operations: `storage_diagnostic` and `apk_preflight` (< 30 MB verification).
+  - Verified cryptographic audit receipts in `audit_log` and durable event journal emission in `events`.
+  - Added `/missions` REST API endpoints with RBAC role enforcement.
+  - 3 new unit tests added in `tests/test_gate8_governed_mission.py`.
+  - Test inventory expanded to **182 tests across 24 suites** (100% PASS in 90.8s with verified production isolation).
 
 ---
 
 ## Next Step
-Proceed to Phase 7 (Gate G7): VOX Push-to-Talk Audio.
+Proceed to Phase 9 (Gate G9): Forensic & Telemetry Expansion.

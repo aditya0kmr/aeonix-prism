@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T09:56:03Z",
-  "total_test_suites": 22,
-  "total_test_cases": 174,
+  "generated_at": "2026-11-09T10:17:20Z",
+  "total_test_suites": 24,
+  "total_test_cases": 182,
   "suites": [
     {
       "module": "test_agents",
@@ -282,6 +282,70 @@
         }
       ],
       "test_count": 5
+    },
+    {
+      "module": "test_gate7_vox_audio",
+      "class": "TestGate7VoxAudio",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_gate7_vox_audio.py",
+      "tests": [
+        {
+          "test_name": "test_01_voice_activity_detection",
+          "docstring": "Verifies RMS energy calculation to distinguish active human speech from silence.",
+          "full_docstring": "Verifies RMS energy calculation to distinguish active human speech from silence.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_audio_payload_bounding_ceiling",
+          "docstring": "Strictly enforces 15-second safety ceiling on push-to-talk audio buffers.",
+          "full_docstring": "Strictly enforces 15-second safety ceiling on push-to-talk audio buffers.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_offline_asr_pipeline_execution",
+          "docstring": "Verifies 100% offline transcription using whisper-cli on POCO NEON.",
+          "full_docstring": "Verifies 100% offline transcription using whisper-cli on POCO NEON.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_firetv_remote_mic_feasibility_assessment",
+          "docstring": "Verifies Fire TV remote mic input architectural constraint assessment.",
+          "full_docstring": "Verifies Fire TV remote mic input architectural constraint assessment.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_http_voice_transcribe_endpoint",
+          "docstring": "Verifies Starlette HTTP POST /api/voice/transcribe endpoint.",
+          "full_docstring": "Verifies Starlette HTTP POST /api/voice/transcribe endpoint.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 5
+    },
+    {
+      "module": "test_gate8_governed_mission",
+      "class": "TestGate8GovernedMission",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_gate8_governed_mission.py",
+      "tests": [
+        {
+          "test_name": "test_01_storage_diagnostic_mission_lifecycle_and_receipt",
+          "docstring": "Verifies full governed storage_diagnostic mission from proposal to verified audit receipt.",
+          "full_docstring": "Verifies full governed storage_diagnostic mission from proposal to verified audit receipt.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_apk_preflight_mission",
+          "docstring": "Verifies governed apk_preflight mission: calculates SHA-256 and validates < 30 MB ceiling.",
+          "full_docstring": "Verifies governed apk_preflight mission: calculates SHA-256 and validates < 30 MB ceiling.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_http_missions_api",
+          "docstring": "Verifies Starlette HTTP POST /missions and GET /missions endpoints.",
+          "full_docstring": "Verifies Starlette HTTP POST /missions and GET /missions endpoints.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 3
     },
     {
       "module": "test_hybrid_router_and_ai",

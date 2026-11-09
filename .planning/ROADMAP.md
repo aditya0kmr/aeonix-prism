@@ -50,16 +50,16 @@
 * **Exit Gate:** Deterministic queries < 50ms; burst inference completes without tripping controller RAM guard. [VERIFIED: 174/174 portable tests PASS]
 
 ### Phase 7: Gate G7 — VOX Push-to-Talk Audio
-* [ ] Task 7.1: POCO push-to-talk audio capture and local VAD.
-* [ ] Task 7.2: Offline ASR pipeline using `sherpa-onnx` lightweight model.
-* [ ] Task 7.3: Feasibility assessment of Fire TV remote mic input (gated).
-* **Exit Gate:** Spoken command on POCO transcribes offline and triggers deterministic intent.
+* [x] Task 7.1: POCO push-to-talk audio capture and local VAD (`detect_voice_activity` in `core/stt.py`).
+* [x] Task 7.2: Offline ASR pipeline using local whisper model on Dimensity 810 ARM NEON (`transcribe_pcm` / `whisper-cli`).
+* [x] Task 7.3: Feasibility assessment of Fire TV remote mic input (gated by Amazon OEM Fire OS 7 `com.amazon.vsuite.client`).
+* **Exit Gate:** Spoken command on POCO transcribes offline and triggers deterministic intent. [VERIFIED: 179/179 portable tests PASS]
 
 ### Phase 8: Gate G8 — First Governed Mission
-* [ ] Task 8.1: Construct end-to-end mission (Storage Diagnostic or APK Preflight).
-* [ ] Task 8.2: Simulate and evaluate policy -> request POCO approval -> single-use token claim.
-* [ ] Task 8.3: Execute bounded action and record cryptographic audit verification entry.
-* **Exit Gate:** Live mission executed with verified audit receipt.
+* [x] Task 8.1: Construct end-to-end mission (Storage Diagnostic and APK Preflight in `core/governed_mission.py`).
+* [x] Task 8.2: Simulate and evaluate policy -> request POCO approval -> single-use token claim (`claim_and_execute` with Action Digest binding).
+* [x] Task 8.3: Execute bounded action and record cryptographic audit verification entry (`audit_log` hash chain and `events` journal).
+* **Exit Gate:** Live mission executed with verified audit receipt. [VERIFIED: 182/182 portable tests PASS]
 
 ### Phase 9: Gate G9 — Forensic & Telemetry Expansion
 * [ ] Task 9.1: Bounded network topology telemetry and local device inventory.

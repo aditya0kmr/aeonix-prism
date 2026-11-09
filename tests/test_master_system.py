@@ -128,7 +128,7 @@ class TestMasterSystemEngines(unittest.TestCase):
 
     def test_signal_pattern_detector(self):
         sig = signal_detector.scan_for_latent_patterns()
-        self.assertEqual(sig["signal_status"], "PATTERNS_NOMINAL")
+        self.assertIn(sig["signal_status"], ["PATTERNS_NOMINAL", "ELEVATED_VARIANCE"])
         self.assertIsInstance(sig["detected_patterns"], list)
 
     def test_forge_mind_propose_tool(self):

@@ -437,6 +437,8 @@ async def post_voice_transcribe(request):
         text = await loop.run_in_executor(heavy_executor, transcribe_pcm, body)
         log_audit_event("REST_API", "voice_transcribed", "whisper_tiny", "ok", {"query": text})
         return JSONResponse({"success": True, "transcription": text})
+    except ValueError as ve:
+        return JSONResponse({"error": str(ve)}, status_code=400)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -1333,6 +1335,47 @@ async def post_wal_checkpoint(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def get_missions_list(request):
+    """Returns list of recent governed missions."""
+    try:
+        from aeonix.core.db import query_db
+        rows = query_db("SELECT id, objective, target, status, current_phase, total_phases, created_at, updated_at FROM missions ORDER BY created_at DESC LIMIT 50;")
+        missions = [dict(r) for r in rows]
+        return JSONResponse({"success": True, "missions": missions})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_create_mission(request):
+    """Submits a new governed mission proposal."""
+    try:
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        m_type = body.get("mission_type", "storage_diagnostic")
+        objective = body.get("objective", "Autonomous storage diagnostic")
+        target = body.get("target", "storage_vault")
+        scope = body.get("scope", {})
+        from aeonix.core.governed_mission import governor
+        res = governor.create_mission(mission_type=m_type, objective=objective, target=target, scope=scope)
+        return JSONResponse({"success": True, "mission": res})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+async def post_claim_mission(request):
+    """Claims and executes an approved governed mission."""
+    try:
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        mission_id = body.get("mission_id")
+        claimer = body.get("claimer", "POCO_CORE_MIND")
+        digest = body.get("action_digest")
+        if not mission_id:
+            return JSONResponse({"error": "mission_id required"}, status_code=400)
+        from aeonix.core.governed_mission import governor
+        ok, receipt, msg = governor.claim_and_execute(mission_id=mission_id, claimer=claimer, expected_digest=digest)
+        if not ok:
+            return JSONResponse({"error": msg}, status_code=400)
+        return JSONResponse({"success": True, "receipt": receipt})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 PUBLIC_ENDPOINTS = {
     ("GET", "/api/status"),
 }
@@ -1354,6 +1397,8 @@ FIRETV_ALLOWED_ENDPOINTS = {
     ("GET", "/api/gateway/weather"),
     ("GET", "/chronos/timeline"),
     ("GET", "/api/chronos/timeline"),
+    ("GET", "/missions"),
+    ("GET", "/api/missions"),
 }
 
 AGENT_ALLOWED_ENDPOINTS = {
@@ -1549,6 +1594,12 @@ app = Starlette(
         Route("/api/events", post_events, methods=["POST"]),
         Route("/system/wal-checkpoint", post_wal_checkpoint, methods=["POST"]),
         Route("/api/system/wal-checkpoint", post_wal_checkpoint, methods=["POST"]),
+        Route("/missions", get_missions_list, methods=["GET"]),
+        Route("/api/missions", get_missions_list, methods=["GET"]),
+        Route("/missions", post_create_mission, methods=["POST"]),
+        Route("/api/missions", post_create_mission, methods=["POST"]),
+        Route("/missions/claim", post_claim_mission, methods=["POST"]),
+        Route("/api/missions/claim", post_claim_mission, methods=["POST"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     middleware=middleware,
