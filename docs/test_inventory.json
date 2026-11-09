@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T08:43:19Z",
-  "total_test_suites": 19,
-  "total_test_cases": 155,
+  "generated_at": "2026-11-09T09:02:24Z",
+  "total_test_suites": 20,
+  "total_test_cases": 161,
   "suites": [
     {
       "module": "test_agents",
@@ -144,6 +144,50 @@
         }
       ],
       "test_count": 10
+    },
+    {
+      "module": "test_gate3_transport_and_sync",
+      "class": "TestGate3TransportAndSync",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_gate3_transport_and_sync.py",
+      "tests": [
+        {
+          "test_name": "test_01_dynamic_tls_certificate_and_san_coverage",
+          "docstring": "Verify sovereign X.509 certificate generation, fingerprint, and SAN IP coverage.",
+          "full_docstring": "Verify sovereign X.509 certificate generation, fingerprint, and SAN IP coverage.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_websocket_rejects_query_token_and_missing_auth",
+          "docstring": "Verify WebSocket rejects token in query param and missing header with 4401.",
+          "full_docstring": "Verify WebSocket rejects token in query param and missing header with 4401.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_03_websocket_handshake_and_ping_pong_sequence",
+          "docstring": "Verify successful connection receives layout and pong carries server_sequence.",
+          "full_docstring": "Verify successful connection receives layout and pong carries server_sequence.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_sequence_based_resync_replays_missed_events",
+          "docstring": "Verify disconnect-reconnect resync requests and replays missed broadcast events.",
+          "full_docstring": "Verify disconnect-reconnect resync requests and replays missed broadcast events.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_oversized_control_frame_rejected",
+          "docstring": "Verify frame exceeding 32 KiB returns FRAME_TOO_LARGE safety error.",
+          "full_docstring": "Verify frame exceeding 32 KiB returns FRAME_TOO_LARGE safety error.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_firetv_cannot_approve_sentinel_actions_over_ws",
+          "docstring": "Verify TV remote role attempting approval over WebSocket is rejected.",
+          "full_docstring": "Verify TV remote role attempting approval over WebSocket is rejected.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 6
     },
     {
       "module": "test_hybrid_router_and_ai",
@@ -473,21 +517,21 @@
       "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_operator_ui.py",
       "tests": [
         {
-          "test_name": "test_01_operator_console_html_accessible",
-          "docstring": "Verify /operator loads 200 OK HTML with mobile UI tokens.",
-          "full_docstring": "Verify /operator loads 200 OK HTML with mobile UI tokens.",
-          "is_negative_security_test": false
+          "test_name": "test_01_operator_console_default_deny_unauthenticated",
+          "docstring": "Verify /operator and /console reject unauthenticated requests with 401.",
+          "full_docstring": "Verify /operator and /console reject unauthenticated requests with 401.",
+          "is_negative_security_test": true
         },
         {
-          "test_name": "test_02_console_alias_accessible",
-          "docstring": "Verify /console alias route mirrors /operator.",
-          "full_docstring": "Verify /console alias route mirrors /operator.",
-          "is_negative_security_test": false
+          "test_name": "test_02_operator_console_firetv_role_forbidden",
+          "docstring": "Verify /operator rejects Fire TV Glass token with 403.",
+          "full_docstring": "Verify /operator rejects Fire TV Glass token with 403.",
+          "is_negative_security_test": true
         },
         {
-          "test_name": "test_03_public_endpoints_contains_operator",
-          "docstring": "Verify PUBLIC_ENDPOINTS allowlist permits /operator and /console.",
-          "full_docstring": "Verify PUBLIC_ENDPOINTS allowlist permits /operator and /console.",
+          "test_name": "test_03_operator_console_html_accessible_with_poco_token",
+          "docstring": "Verify /operator loads 200 OK HTML for POCO Core authority.",
+          "full_docstring": "Verify /operator loads 200 OK HTML for POCO Core authority.",
           "is_negative_security_test": false
         },
         {

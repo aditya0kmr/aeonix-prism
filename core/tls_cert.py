@@ -24,14 +24,29 @@ KEY_FILE = os.path.join(SECRETS_DIR, "aeonix_key.pem")
 PIN_FILE = os.path.join(SECRETS_DIR, "cert_fingerprint.json")
 
 
+def get_active_ip() -> str:
+    """Returns active local network IP or loopback fallback."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
 def ensure_sovereign_tls_credentials(
     secrets_dir: str = SECRETS_DIR,
-    primary_ip: str = "10.116.23.168"
+    primary_ip: Optional[str] = None
 ) -> Tuple[str, str, str]:
     """
     Ensures sovereign TLS certificate and key exist in secrets directory.
     Returns (cert_path: str, key_path: str, sha256_fingerprint: str).
     """
+    if primary_ip is None:
+        primary_ip = get_active_ip()
     os.makedirs(secrets_dir, mode=0o700, exist_ok=True)
     cert_path = os.path.join(secrets_dir, "aeonix_cert.pem")
     key_path = os.path.join(secrets_dir, "aeonix_key.pem")
@@ -66,6 +81,8 @@ def ensure_sovereign_tls_credentials(
     ]
     try:
         san_list.append(x509.IPAddress(ipaddress.IPv4Address(primary_ip)))
+        if primary_ip != "10.116.23.168":
+            san_list.append(x509.IPAddress(ipaddress.IPv4Address("10.116.23.168")))
     except Exception:
         pass
 

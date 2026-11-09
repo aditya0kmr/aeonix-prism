@@ -273,7 +273,28 @@ from concurrent.futures import ThreadPoolExecutor
 heavy_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="aeonix_worker")
 llm_inference_lock = asyncio.Lock()
 
+_SERVER_SEQUENCE = 0
+_SERVER_EVENT_RING_BUFFER: List[Dict[str, Any]] = []
+_MAX_RING_BUFFER_SIZE = 128
+
+def _next_server_sequence() -> int:
+    global _SERVER_SEQUENCE
+    _SERVER_SEQUENCE += 1
+    return _SERVER_SEQUENCE
+
+def _record_server_event(event: dict):
+    global _SERVER_EVENT_RING_BUFFER
+    _SERVER_EVENT_RING_BUFFER.append(event)
+    if len(_SERVER_EVENT_RING_BUFFER) > _MAX_RING_BUFFER_SIZE:
+        _SERVER_EVENT_RING_BUFFER.pop(0)
+
+def get_events_since(last_seq: int) -> List[dict]:
+    return [ev for ev in _SERVER_EVENT_RING_BUFFER if ev.get("server_sequence", 0) > last_seq]
+
 async def broadcast_message(message: dict):
+    seq = _next_server_sequence()
+    message["server_sequence"] = seq
+    _record_server_event(dict(message))
     payload = json.dumps(message)
     dead_connections = set()
     for ws in list(active_connections):
@@ -476,11 +497,32 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
+            # 32 KiB safety ceiling for control messages (Section 10 of 4 Nov Spec)
+            if len(data) > 32768 and '"audio_chunk"' not in data:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "code": "FRAME_TOO_LARGE",
+                    "error": f"Message exceeds 32 KiB safety ceiling ({len(data)} bytes)"
+                }))
+                continue
+
             try:
                 msg = json.loads(data)
                 msg_type = msg.get("type")
                 if msg_type == "ping":
-                    await websocket.send_text(json.dumps({"type": "pong", "timestamp": time.time()}))
+                    await websocket.send_text(json.dumps({
+                        "type": "pong",
+                        "timestamp": time.time(),
+                        "server_sequence": _SERVER_SEQUENCE
+                    }))
+                elif msg_type == "sync_request":
+                    last_seq = int(msg.get("last_sequence", 0))
+                    missed = get_events_since(last_seq)
+                    await websocket.send_text(json.dumps({
+                        "type": "sync_response",
+                        "server_sequence": _SERVER_SEQUENCE,
+                        "replayed_events": missed
+                    }))
                 elif msg_type == "sentinel_action":
                     req_id = msg.get("request_id")
                     approved = bool(msg.get("approved", False))

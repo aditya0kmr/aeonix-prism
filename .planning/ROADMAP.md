@@ -26,10 +26,10 @@
 * **Exit Gate:** Operator approval flow verified in browser; unapproved R3/R4 actions strictly rejected. [VERIFIED]
 
 ### Phase 3: Gate G3 — Core Transport, Certificate Pinning & State Resync
-* [ ] Task 3.1: Generate self-signed CA and device certificate with documented rotation flow.
-* [ ] Task 3.2: Verify Fire TV Java client certificate pinning handshake (`AeonixWebSocketClientTest`).
-* [ ] Task 3.3: Implement sequence-based state resynchronization cursor and heartbeat watchdog.
-* **Exit Gate:** Encrypted WebSocket link established; reconnects resync lost state without duplication.
+* [x] Task 3.1: Generate self-signed CA and device certificate with dynamic subnet SAN coverage (`core/tls_cert.py`).
+* [x] Task 3.2: Verify Fire TV Java client certificate pinning handshake (`AeonixWebSocketClientTest`: 7/7 JUnit passed).
+* [x] Task 3.3: Implement sequence-based state resynchronization cursor, 32 KiB safety frame bounding, and heartbeat watchdog (`tests/test_gate3_transport_and_sync.py`: 6/6 passed).
+* **Exit Gate:** Encrypted WebSocket link established; reconnects resync lost state without duplication. [VERIFIED]
 
 ### Phase 4: Gate G4 — Chronos Context, Durable Events & Integrity Proofs
 * [ ] Task 4.1: Durable SQLite event envelope schema validation and WAL checkpointing.
