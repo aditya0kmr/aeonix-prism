@@ -4,6 +4,12 @@
 
 ---
 
+## RC-1 status
+
+RC-1 is conditionally certified for a limited two-device, English speech-fixture scope. The physically verified Fire TV artifact is app-debug.apk. Spoken Hindi/Hinglish, Fire TV remote microphone, external public-data gateways, and multi-device mesh routing remain deferred. See docs/RELEASE_NOTES_RC1.md and docs/GITHUB_RELEASE_RC1.md.
+
+---
+
 ## 1. System Vision & Architecture
 
 ÆONIX PRISM is a two-device, zero-cost, privacy-first sovereign intelligence operating system designed from the **Complete A–Z Master Document** and **Master Coding Guidelines v2.0**:
