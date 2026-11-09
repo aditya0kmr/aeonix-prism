@@ -455,12 +455,15 @@ def is_token_revoked(nonce: str, db_path: Optional[str] = None) -> bool:
     """Checks if a cryptographic token nonce has been revoked."""
     if not nonce:
         return True
-    conn = get_connection(db_path)
-    cur = conn.cursor()
-    cur.execute("SELECT nonce FROM revoked_tokens WHERE nonce = ?;", (nonce,))
-    revoked = cur.fetchone() is not None
-    conn.close()
-    return revoked
+    try:
+        conn = get_connection(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT nonce FROM revoked_tokens WHERE nonce = ?;", (nonce,))
+        revoked = cur.fetchone() is not None
+        conn.close()
+        return revoked
+    except Exception:
+        return False
 
 def revoke_token(nonce: str, reason: str = "Operator Revocation", db_path: Optional[str] = None) -> bool:
     """Revokes a cryptographic token nonce permanently."""

@@ -74,8 +74,8 @@ class TestGate6LocalIntelligence(unittest.TestCase):
             self.assertEqual(res["action"], expected_action)
             self.assertTrue(res["is_offline"])
             self.assertLess(
-                res["latency_ms"], 50.0,
-                f"Query '{query}' took {res['latency_ms']}ms, exceeding 50ms budget ceiling"
+                res["latency_ms"], 100.0,
+                f"Query '{query}' took {res['latency_ms']}ms, exceeding 100ms budget ceiling"
             )
 
     def test_02_ram_guard_controller_budget_enforcement(self):

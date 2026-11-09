@@ -40,9 +40,24 @@ from cryptography import x509
 class TestGate3TransportAndSync(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from aeonix.core.db import init_database
+        cls.test_dir = tempfile.mkdtemp(prefix="aeonix_test_g3_")
+        cls.db_path = os.path.join(cls.test_dir, "test_vault.db")
+        cls.orig_db = os.environ.get("AEONIX_DB_PATH")
+        os.environ["AEONIX_DB_PATH"] = cls.db_path
+        init_database(cls.db_path)
         cls.client = TestClient(app)
         cls.poco_token = issue_device_token("poco_test_gate3", role=ROLE_POCO_CORE)
         cls.firetv_token = issue_device_token("firetv_sheldon_gate3", role=ROLE_FIRETV_GLASS)
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        if cls.orig_db is not None:
+            os.environ["AEONIX_DB_PATH"] = cls.orig_db
+        else:
+            os.environ.pop("AEONIX_DB_PATH", None)
+        shutil.rmtree(cls.test_dir, ignore_errors=True)
 
     def test_01_dynamic_tls_certificate_and_san_coverage(self):
         """Verify sovereign X.509 certificate generation, fingerprint, and SAN IP coverage."""

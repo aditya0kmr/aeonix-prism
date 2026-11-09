@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import time
+import shutil
 import tempfile
 import sqlite3
 import unittest
@@ -69,9 +70,19 @@ class TestGate10ReleaseHardeningAndDisasterRecovery(unittest.TestCase):
     def setUpClass(cls):
         cls.drill_dir = tempfile.mkdtemp(prefix="aeonix_drill_g10_")
         cls.db_path = os.path.join(cls.drill_dir, "sovereign_production.db")
+        cls.orig_db = os.environ.get("AEONIX_DB_PATH")
+        os.environ["AEONIX_DB_PATH"] = cls.db_path
         init_database(cls.db_path)
         cls.passphrase = "DrillEmergencyPassphrase2026!"
         cls.client = TestClient(app, base_url="http://testserver")
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.orig_db is not None:
+            os.environ["AEONIX_DB_PATH"] = cls.orig_db
+        else:
+            os.environ.pop("AEONIX_DB_PATH", None)
+        shutil.rmtree(cls.drill_dir, ignore_errors=True)
 
     def setUp(self):
         init_database(self.db_path)

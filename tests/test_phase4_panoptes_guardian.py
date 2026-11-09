@@ -64,25 +64,36 @@ class TestPhase4PanoptesAndGuardian(unittest.TestCase):
         dns = passive_dns_recon("127.0.0.1")
         self.assertEqual(dns["domain"], "127.0.0.1")
 
-        from unittest.mock import patch, MagicMock
-        with patch("httpx.Client") as mock_client_cls:
-            mock_client = mock_client_cls.return_value.__enter__.return_value
-            mock_resp = MagicMock()
-            mock_resp.status_code = 200
-            mock_resp.headers = {
-                "server": "uvicorn",
-                "strict-transport-security": "max-age=31536000",
-                "content-security-policy": "default-src 'self'"
-            }
-            mock_client.get.return_value = mock_resp
+        # Real Loopback Integration Test (Zero Mocks / Real Network Sockets)
+        import http.server
+        import threading
 
-            # Test HTTP fingerprint against Core Mind server
-            fp = http_fingerprint("http://127.0.0.1:8080/api/status", timeout=2.0)
+        class RealHttpServerHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("server", "uvicorn")
+                self.send_header("strict-transport-security", "max-age=31536000")
+                self.send_header("content-security-policy", "default-src 'self'")
+                self.end_headers()
+                self.wfile.write(b'{"status":"online"}')
+
+            def log_message(self, format, *args):
+                pass
+
+        test_srv = http.server.HTTPServer(("127.0.0.1", 0), RealHttpServerHandler)
+        srv_port = test_srv.server_port
+        srv_thread = threading.Thread(target=test_srv.serve_forever, daemon=True)
+        srv_thread.start()
+
+        try:
+            fp = http_fingerprint(f"http://127.0.0.1:{srv_port}/api/status", timeout=2.0)
             self.assertEqual(fp["status_code"], 200)
             self.assertIn("server", fp)
             self.assertIn("uvicorn", fp["server"].lower())
             self.assertTrue(fp["hsts"])
             self.assertTrue(fp["csp"])
+        finally:
+            test_srv.shutdown()
 
     def test_panoptes_osint_report_generator(self):
         """Test automated OSINT dossier generation, security finding calculation, and audit logging."""

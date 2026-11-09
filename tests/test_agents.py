@@ -33,6 +33,25 @@ from agents.orchestrator import orchestrator
 
 
 class TestAgentSystem(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        import shutil
+        from aeonix.core.db import init_database
+        cls.test_dir = tempfile.mkdtemp(prefix="aeonix_test_agents_")
+        cls.db_path = os.path.join(cls.test_dir, "test_vault.db")
+        cls.orig_db = os.environ.get("AEONIX_DB_PATH")
+        os.environ["AEONIX_DB_PATH"] = cls.db_path
+        init_database(cls.db_path)
+
+    @classmethod
+    def tearDownClass(cls):
+        import shutil
+        if cls.orig_db is not None:
+            os.environ["AEONIX_DB_PATH"] = cls.orig_db
+        else:
+            os.environ.pop("AEONIX_DB_PATH", None)
+        shutil.rmtree(cls.test_dir, ignore_errors=True)
     def test_navigator_plan_decomposition(self):
         nav = NavigatorAgent()
         plan = nav.execute({"objective": "Investigate public OSINT posture of example.com"})

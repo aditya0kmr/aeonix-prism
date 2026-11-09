@@ -15,4 +15,7 @@ echo "🛡️  [2/3] Verifying SQLite Vault & Sentinel Queue..."
 python3 -c "from aeonix.core.db import init_database; init_database(); print('Vault integrity OK')"
 
 echo "🚀 [3/3] Launching ÆONIX PRISM Core Server (Port 8080)..."
-exec uvicorn aeonix.core.server:app --host 0.0.0.0 --port 8080 --workers 1 --no-access-log
+# Sovereign Default-Deny: Bind strictly to localhost (127.0.0.1) unless operator explicitly configures AEONIX_BIND_HOST
+BIND_HOST="${AEONIX_BIND_HOST:-127.0.0.1}"
+echo "🔒 Binding to: ${BIND_HOST}:8080 (LAN binding requires explicit AEONIX_BIND_HOST=0.0.0.0)"
+exec uvicorn aeonix.core.server:app --host "${BIND_HOST}" --port 8080 --workers 1 --no-access-log

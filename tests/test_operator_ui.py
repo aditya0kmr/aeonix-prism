@@ -33,6 +33,8 @@ from aeonix.core.db import queue_sentinel_request, get_connection
 class TestOperatorUI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from aeonix.core.operator_console import setup_operator_secret
+        setup_operator_secret("TestSovereignSandboxPassphrase123!")
         cls.client = TestClient(app)
         cls.poco_token = issue_device_token("poco_test_operator", role=ROLE_POCO_CORE)
         cls.firetv_token = issue_device_token("firetv_sheldon", role=ROLE_FIRETV_GLASS)

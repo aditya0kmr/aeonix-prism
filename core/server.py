@@ -88,6 +88,13 @@ from contextlib import asynccontextmanager
 async def lifespan(app: Starlette):
     init_database()
     log_audit_event("SYSTEM", "daemon_start", "aeonix_core", "ok", {"port": 8080})
+    try:
+        from aeonix.core.governed_mission import governor
+        reconciled = governor.reconcile_interrupted_missions()
+        if reconciled:
+            print(f"[MISSION RECONCILER]: Recovered {len(reconciled)} interrupted missions into NEEDS_RECONCILIATION")
+    except Exception as re:
+        print(f"[MISSION RECONCILER ERROR]: {re}")
     discovery_service.start()
     yield
     discovery_service.stop()
@@ -436,12 +443,39 @@ async def post_voice_transcribe(request):
         body = await request.body()
         if not body:
             return JSONResponse({"error": "Empty audio payload"}, status_code=400)
+        lang = request.query_params.get("lang") or request.headers.get("X-Whisper-Lang")
+        model = request.query_params.get("model") or request.headers.get("X-Whisper-Model")
         loop = asyncio.get_event_loop()
-        text = await loop.run_in_executor(heavy_executor, transcribe_pcm, body)
-        log_audit_event("REST_API", "voice_transcribed", "whisper_tiny", "ok", {"query": text})
-        return JSONResponse({"success": True, "transcription": text})
+        text = await loop.run_in_executor(heavy_executor, lambda: transcribe_pcm(body, model_path=model, lang=lang))
+        log_audit_event("REST_API", "voice_transcribed", "whisper", "ok", {"query": text, "lang": lang or "auto"})
+        return JSONResponse({"success": True, "transcription": text, "lang": lang or "auto"})
     except ValueError as ve:
         return JSONResponse({"error": str(ve)}, status_code=400)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_voice_model_info_endpoint(request):
+    """Returns active and available Whisper model forensic metadata."""
+    try:
+        from aeonix.core.stt import get_stt_model_info
+        return JSONResponse(get_stt_model_info())
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def post_reconcile_mission(request):
+    """Resolves an interrupted mission in NEEDS_RECONCILIATION state."""
+    try:
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        mission_id = body.get("mission_id")
+        resolution = body.get("resolution", "ABORT")
+        passphrase = body.get("operator_passphrase") or request.headers.get("X-Operator-Passphrase", "")
+        if not mission_id:
+            return JSONResponse({"error": "mission_id required"}, status_code=400)
+        from aeonix.core.governed_mission import governor
+        ok, msg = governor.resolve_reconciliation(mission_id=mission_id, resolution=resolution, operator_passphrase=passphrase)
+        if not ok:
+            return JSONResponse({"error": msg}, status_code=400)
+        return JSONResponse({"success": True, "message": msg})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -1435,6 +1469,7 @@ FIRETV_ALLOWED_ENDPOINTS = {
     ("POST", "/api/sentinel/resolve"),
     ("POST", "/api/intent"),
     ("POST", "/api/voice/transcribe"),
+    ("GET", "/api/voice/model"),
     ("GET", "/api/lumen/surface"),
     ("GET", "/api/briefing"),
     ("GET", "/api/media/channels"),
@@ -1653,6 +1688,8 @@ app = Starlette(
         Route("/api/missions", post_create_mission, methods=["POST"]),
         Route("/missions/claim", post_claim_mission, methods=["POST"]),
         Route("/api/missions/claim", post_claim_mission, methods=["POST"]),
+        Route("/api/missions/reconcile", post_reconcile_mission, methods=["POST"]),
+        Route("/api/voice/model", get_voice_model_info_endpoint, methods=["GET"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     middleware=middleware,

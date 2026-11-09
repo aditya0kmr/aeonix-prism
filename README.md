@@ -239,3 +239,20 @@ bash ~/aeonix/scripts/start-core.sh
 ```bash
 curl -s http://127.0.0.1:8080/api/status | jq .
 ```
+
+---
+
+## 6. Release Candidate Verification & Audited Evidence Integrity (RC-1)
+
+The system has undergone rigorous automated and hardware evidence-integrity auditing across all 11 release gates (G0–G10):
+
+| Audit Metric | Verified Finding | Evidence Artifact |
+| :--- | :--- | :--- |
+| **Portable Test Suite** | **199 PASS / 0 FAIL / 0 ERROR** across 27 suites (86.3s run time) | `docs/test_run_artifact.json` |
+| **Test Mock Policy** | **Zero Mocks**: All tests use real SQLite, real sockets (loopback HTTP server), and real crypto | `tests/test_phase4_panoptes_guardian.py` |
+| **Voice STT (VOX)** | Real human spoken English verified on POCO ARM NEON (`jfk.wav`, 2.26s latency, 0.2x RTF). Multilingual model (`ggml-tiny.bin`, SHA-256 `be07e048...`) installed. Spoken Hindi mechanically tested; human voice corpus flagged for post-RC1 empirical evaluation | `~/aeonix-verification/rc1/evidence/07_voice_multilingual_matrix.json` |
+| **Mission Crash Recovery** | Interrupted missions transition to `NEEDS_RECONCILIATION` upon reboot. Blind retries strictly blocked; operator PBKDF2 passphrase resolution enforced | `~/aeonix-verification/rc1/evidence/08_crash_reconciliation_live.json` |
+| **Living Surface UI** | **37.1 MB PSS**, 0 WebViews, 97-147 native Leanback views. Steady-state 60fps rendering with 0 missed VSYNCs (cold-start window inflation requires ~48–200ms for initial 13 frames) | `~/aeonix-verification/rc1/evidence/08_firetv_gfxinfo.txt` |
+| **Security & Airgap** | Default bind host `127.0.0.1:8080` (requires explicit `AEONIX_BIND_HOST=0.0.0.0` for LAN). Fire TV terminal cannot approve Sentinel actions; POCO console is final authority | `~/aeonix-verification/rc1/evidence/07_security_rbac_matrix.json` |
+| **Disaster Recovery** | AES-256-GCM encrypted backup, simulated wipe, bit-for-bit isolated restore with 5,448 audit records and 50 missions fully intact | `~/aeonix-verification/rc1/evidence/g10_restore_hash.txt` |
+

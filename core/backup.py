@@ -243,7 +243,8 @@ def create_vault_backup(
                 "encrypted": encrypt,
                 "audit_events": total_events,
                 "latency_ms": dt
-            }
+            },
+            db_path=db_path
         )
 
         return {

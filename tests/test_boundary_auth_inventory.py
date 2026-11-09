@@ -63,6 +63,8 @@ class TestBoundaryAuthInventory(unittest.TestCase):
     def setUpClass(cls):
         cls.test_dir = tempfile.mkdtemp(prefix="aeonix_boundary_test_")
         cls.db_path = os.path.join(cls.test_dir, "test_vault.db")
+        cls.orig_db = os.environ.get("AEONIX_DB_PATH")
+        os.environ["AEONIX_DB_PATH"] = cls.db_path
         init_database(cls.db_path)
         cls.client = TestClient(app)
 
@@ -75,12 +77,14 @@ class TestBoundaryAuthInventory(unittest.TestCase):
         cls.revoked_token = issue_device_token("test_revoked_device", ROLE_POCO_CORE)
         payload = verify_token(cls.revoked_token)
         cls.revoked_nonce = payload["nonce"]
-        from aeonix.core.db import DB_PATH
         revoke_token(cls.revoked_nonce, "revocation_boundary_test", cls.db_path)
-        revoke_token(cls.revoked_nonce, "revocation_boundary_test", DB_PATH)
 
     @classmethod
     def tearDownClass(cls):
+        if cls.orig_db is not None:
+            os.environ["AEONIX_DB_PATH"] = cls.orig_db
+        else:
+            os.environ.pop("AEONIX_DB_PATH", None)
         shutil.rmtree(cls.test_dir, ignore_errors=True)
 
     def test_01_dynamic_route_inventory_default_deny_unauthenticated(self):
@@ -438,8 +442,12 @@ class TestBoundaryAuthInventory(unittest.TestCase):
         finally:
             if orig_sec is not None:
                 os.environ["AEONIX_SECRETS_DIR"] = orig_sec
+            else:
+                os.environ.pop("AEONIX_SECRETS_DIR", None)
             if orig_db is not None:
                 os.environ["AEONIX_DB_PATH"] = orig_db
+            else:
+                os.environ.pop("AEONIX_DB_PATH", None)
 
 
 if __name__ == "__main__":

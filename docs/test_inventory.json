@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T11:26:30Z",
-  "total_test_suites": 26,
-  "total_test_cases": 195,
+  "generated_at": "2026-11-09T14:19:52Z",
+  "total_test_suites": 27,
+  "total_test_cases": 199,
   "suites": [
     {
       "module": "test_agents",
@@ -588,6 +588,38 @@
         }
       ],
       "test_count": 16
+    },
+    {
+      "module": "test_mission_crash_reconciliation",
+      "class": "TestMissionCrashReconciliation",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_mission_crash_reconciliation.py",
+      "tests": [
+        {
+          "test_name": "test_01_unhandled_execution_exception_transitions_to_needs_reconciliation",
+          "docstring": "Uncertain execution failure must transition to NEEDS_RECONCILIATION rather than silent fail or retry.",
+          "full_docstring": "Uncertain execution failure must transition to NEEDS_RECONCILIATION rather than silent fail or retry.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_02_interrupted_process_restart_reconciliation",
+          "docstring": "Missions stranded in EXECUTING/VERIFYING upon crash/reboot enter NEEDS_RECONCILIATION on startup.",
+          "full_docstring": "Missions stranded in EXECUTING/VERIFYING upon crash/reboot enter NEEDS_RECONCILIATION on startup.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_no_blind_retry_and_duplicate_claim_prevention",
+          "docstring": "A mission in NEEDS_RECONCILIATION cannot be claimed again directly.",
+          "full_docstring": "A mission in NEEDS_RECONCILIATION cannot be claimed again directly.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_operator_reconciliation_resolution",
+          "docstring": "Operator can abort or authorize a controlled retry requiring valid passphrase.",
+          "full_docstring": "Operator can abort or authorize a controlled retry requiring valid passphrase.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 4
     },
     {
       "module": "test_narrow_fs_allowlist",
