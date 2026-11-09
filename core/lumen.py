@@ -35,6 +35,14 @@ class LumenContextEngine:
         rows = query_db("SELECT COUNT(*) FROM tasks WHERE status = 'pending'")
         return rows[0][0] if rows else 0
 
+    def get_monitored_topics_summary(self) -> List[str]:
+        try:
+            from aeonix.core.panoptes import list_monitored_topics
+            topics = list_monitored_topics()
+            return [t["name"] for t in topics if t.get("document_count", 0) > 0][:5]
+        except Exception:
+            return []
+
     def compute_living_surface_state(self) -> Dict[str, Any]:
         """
         Synthesizes the complete Living Surface HUD payload for the Fire TV.
@@ -42,6 +50,7 @@ class LumenContextEngine:
         time_ctx = self.evaluate_time_context()
         pending_sentinel = self.get_pending_approvals_count()
         pending_tasks = self.get_active_tasks_count()
+        active_topics = self.get_monitored_topics_summary()
 
         cards: List[Dict[str, Any]] = []
 
@@ -52,6 +61,15 @@ class LumenContextEngine:
                 "content": f"{pending_sentinel} consequential action(s) awaiting physical remote approval.",
                 "type": "sentinel_alert",
                 "priority": "HIGH",
+            })
+
+        # Knowledge Vault Topics Card (if active topics exist)
+        if active_topics:
+            cards.append({
+                "title": "Knowledge Vault & Monitored Topics",
+                "content": f"{len(active_topics)} active research topics: {', '.join(active_topics)}",
+                "type": "knowledge_topics",
+                "priority": "NORMAL",
             })
 
         # Contextual Period Card

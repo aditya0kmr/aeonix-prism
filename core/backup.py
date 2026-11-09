@@ -436,6 +436,15 @@ def _quiesce_database(target_db_path: str, timeout: float = 5.0) -> Tuple[Option
                 except Exception:
                     pass
             time.sleep(0.1)
+        except sqlite3.DatabaseError:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            # Target file is corrupted or not a valid SQLite database (disaster recovery state);
+            # no active SQLite writers can hold valid transactions on it.
+            return None, None
         except Exception as e:
             if conn:
                 try:
@@ -569,8 +578,15 @@ def restore_vault_backup(
                 held_conn.close()
                 held_conn = None
         else:
-            # Target DB did not exist; safely copy into place
+            # Target DB did not exist or was corrupt; safely copy into place
             os.makedirs(os.path.dirname(os.path.abspath(target_db_path)), exist_ok=True)
+            for suffix in ["-wal", "-shm"]:
+                wf = f"{target_db_path}{suffix}"
+                if os.path.exists(wf):
+                    try:
+                        os.remove(wf)
+                    except Exception:
+                        pass
             temp_restoring = f"{target_db_path}.tmp_restoring"
             shutil.copy2(extracted_db, temp_restoring)
             os.replace(temp_restoring, target_db_path)

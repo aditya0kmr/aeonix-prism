@@ -40,9 +40,12 @@ from aeonix.core.llama_runner import llama_runner
 from aeonix.core.fast_path import match_fast_path, execute_fast_path
 from aeonix.core.memory import store_memory, recall_memories, generate_daily_briefing
 from aeonix.core.stt import transcribe_pcm
-from aeonix.core.panoptes import run_passive_osint, get_entity_graph, request_active_probe
+from aeonix.core.panoptes import (
+    run_passive_osint, get_entity_graph, request_active_probe,
+    ingest_markdown_note, query_notes_by_topic, list_monitored_topics, verify_note_evidence
+)
 from aeonix.core.veritas import create_case, ingest_evidence, verify_evidence, generate_case_manifest
-from aeonix.core.guardian import get_network_inventory, async_get_network_inventory
+from aeonix.core.guardian import get_network_inventory, async_get_network_inventory, get_bounded_network_telemetry
 from aeonix.core.atlas_watch import run_supervisor_cycle
 from aeonix.core.spectra import get_channel_catalog, get_current_playback, set_playback_state, find_channel_by_query
 from aeonix.core.sanctuary import engage_sanctuary, release_sanctuary, get_sanctuary_status, is_sanctuary_active
@@ -629,6 +632,44 @@ async def get_panoptes_graph(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def post_panoptes_ingest_note(request):
+    try:
+        body = await request.json()
+        content = body.get("content", "")
+        if not content:
+            return JSONResponse({"error": "Content required"}, status_code=400)
+        source_path = body.get("source_path")
+        source_url = body.get("source_url")
+        author = body.get("author", "Aadi")
+        case_id = body.get("case_id", "case_knowledge_vault")
+        res = ingest_markdown_note(
+            content=content,
+            source_path=source_path,
+            source_url=source_url,
+            author=author,
+            case_id=case_id
+        )
+        return JSONResponse({"success": True, "note": res})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_panoptes_topics(request):
+    try:
+        topics = list_monitored_topics()
+        return JSONResponse({"success": True, "topics": topics})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_panoptes_topic_notes(request):
+    try:
+        topic = request.query_params.get("topic", "")
+        if not topic:
+            return JSONResponse({"error": "Topic parameter required"}, status_code=400)
+        notes = query_notes_by_topic(topic)
+        return JSONResponse({"success": True, "notes": notes})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 # VERITAS Endpoints
 async def list_veritas_cases(request):
     try:
@@ -681,6 +722,14 @@ async def get_guardian_network(request):
     try:
         inv = await async_get_network_inventory()
         return JSONResponse({"success": True, "network": inv})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+async def get_guardian_telemetry(request):
+    try:
+        force = request.query_params.get("force", "false").lower() == "true"
+        telemetry = get_bounded_network_telemetry(force_refresh=force)
+        return JSONResponse({"success": True, "telemetry": telemetry})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -1539,11 +1588,15 @@ app = Starlette(
         Route("/api/voice/transcribe", post_voice_transcribe, methods=["POST"]),
         Route("/api/panoptes/scan", post_panoptes_scan, methods=["POST"]),
         Route("/api/panoptes/graph", get_panoptes_graph, methods=["GET"]),
+        Route("/api/panoptes/ingest-note", post_panoptes_ingest_note, methods=["POST"]),
+        Route("/api/panoptes/topics", get_panoptes_topics, methods=["GET"]),
+        Route("/api/panoptes/topics/notes", get_panoptes_topic_notes, methods=["GET"]),
         Route("/api/veritas/cases", list_veritas_cases, methods=["GET"]),
         Route("/api/veritas/cases", post_veritas_case, methods=["POST"]),
         Route("/api/veritas/evidence", post_veritas_evidence, methods=["POST"]),
         Route("/api/veritas/manifest", get_veritas_manifest, methods=["GET"]),
         Route("/api/guardian/network", get_guardian_network, methods=["GET"]),
+        Route("/api/guardian/telemetry", get_guardian_telemetry, methods=["GET"]),
         Route("/api/atlas/health", get_atlas_health, methods=["GET"]),
         Route("/api/media/channels", get_media_channels, methods=["GET"]),
         Route("/api/media/current", get_media_current, methods=["GET"]),

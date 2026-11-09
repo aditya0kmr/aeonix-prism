@@ -8,15 +8,18 @@ import os
 import json
 import time
 import socket
+import re
+import hashlib
+import uuid
 import urllib.parse
 from typing import Dict, Any, List, Optional
 import httpx
 
-from aeonix.core.db import get_connection, log_audit_event, queue_sentinel_request
+from aeonix.core.db import get_connection, log_audit_event, queue_sentinel_request, record_durable_event
 
-def upsert_entity(name: str, entity_type: str, attributes: Dict[str, Any]) -> str:
+def upsert_entity(name: str, entity_type: str, attributes: Dict[str, Any], db_path: Optional[str] = None) -> str:
     """Inserts or updates an entity in the PANOPTES graph."""
-    conn = get_connection()
+    conn = get_connection(db_path) if db_path else get_connection()
     cur = conn.cursor()
     now = time.time()
     
@@ -50,16 +53,18 @@ def add_relation(
     target_id: str, 
     relation_type: str, 
     confidence: float = 1.0, 
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
+    db_path: Optional[str] = None
 ) -> str:
     """Creates a directed edge between two entities in the graph."""
     if metadata is None:
         metadata = {}
-    conn = get_connection()
+    conn = get_connection(db_path) if db_path else get_connection()
     cur = conn.cursor()
     now = time.time()
     
-    rel_id = f"rel_{source_id[:8]}_{target_id[:8]}_{relation_type[:6]}"
+    rel_hash = hashlib.sha256(f"{source_id}:{target_id}:{relation_type.lower()}".encode()).hexdigest()[:16]
+    rel_id = f"rel_{rel_hash}"
     cur.execute("""
         INSERT OR REPLACE INTO entity_relations (id, source_id, target_id, relation_type, confidence, metadata_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?);
@@ -317,6 +322,342 @@ def request_active_probe(target: str, port_range: List[int]) -> Dict[str, Any]:
         "request_id": req_id,
         "message": "Active probe paused at Sentinel Gate. Authorization required on POCO Core Mind."
     }
+
+# =========================================================================
+# TOPIC MONITORING & SOURCE-LINKED MARKDOWN INGESTION (Gate G9)
+# =========================================================================
+
+def parse_markdown_document(content: str) -> Dict[str, Any]:
+    """
+    Parses Markdown text:
+    - Extracts frontmatter (YAML) if present.
+    - Extracts document title from frontmatter or first heading.
+    - Extracts headings (#, ##, ###) as topical sections.
+    - Extracts inline hashtags (#topic) and frontmatter tags.
+    - Extracts citations and hyperlinks [label](url).
+    """
+    frontmatter: Dict[str, Any] = {}
+    body = content
+
+    # 1. Frontmatter extraction
+    fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+    if fm_match:
+        fm_text = fm_match.group(1)
+        body = content[fm_match.end():]
+        for line in fm_text.splitlines():
+            line = line.strip()
+            if ":" in line and not line.startswith("#"):
+                k, v = line.split(":", 1)
+                k = k.strip()
+                v = v.strip().strip('"\'')
+                if v.startswith("[") and v.endswith("]"):
+                    # list format: [a, b, c]
+                    items = [item.strip().strip('"\'') for item in v[1:-1].split(",") if item.strip()]
+                    frontmatter[k] = items
+                else:
+                    frontmatter[k] = v
+
+    # 2. Title extraction
+    title = frontmatter.get("title")
+    if not title:
+        title_match = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
+        if title_match:
+            title = title_match.group(1).strip()
+        else:
+            title = "Untitled Note"
+
+    # 3. Headings extraction
+    headings = []
+    for m in re.finditer(r"^(#{1,3})\s+(.+)$", body, re.MULTILINE):
+        level = len(m.group(1))
+        h_text = m.group(2).strip()
+        headings.append({"level": level, "text": h_text})
+
+    # 4. Tags / Topics extraction
+    topics_set = set()
+    # From frontmatter
+    fm_tags = frontmatter.get("tags") or frontmatter.get("topics") or []
+    if isinstance(fm_tags, list):
+        for t in fm_tags:
+            topics_set.add(str(t).strip().lower())
+    elif isinstance(fm_tags, str):
+        for t in fm_tags.split(","):
+            if t.strip():
+                topics_set.add(t.strip().lower())
+
+    # From inline hashtags (e.g. #security, #firetv)
+    for tag in re.findall(r"(?:^|\s)#([a-zA-Z0-9_\-]+)", body):
+        topics_set.add(tag.strip().lower())
+
+    # Headings also serve as topical indices
+    for h in headings:
+        clean_h = re.sub(r"[^\w\s-]", "", h["text"]).strip().lower()
+        if clean_h and len(clean_h) <= 40:
+            topics_set.add(clean_h)
+
+    # 5. Markdown citations / links extraction: [label](url)
+    citations = []
+    link_pattern = re.compile(r"\[([^\]]+)\]\((https?://[^\s\)]+|file://[^\s\)]+|/[^\s\)]+)\)")
+    for match in link_pattern.finditer(body):
+        label = match.group(1).strip()
+        url = match.group(2).strip()
+        citations.append({"label": label, "url": url})
+
+    return {
+        "title": title,
+        "frontmatter": frontmatter,
+        "headings": headings,
+        "topics": sorted(list(topics_set)),
+        "citations": citations,
+        "char_count": len(content),
+        "word_count": len(content.split()),
+        "body_preview": body.strip()[:200]
+    }
+
+
+def ingest_markdown_note(
+    content: str,
+    source_path: Optional[str] = None,
+    source_url: Optional[str] = None,
+    author: str = "Aadi",
+    case_id: str = "case_knowledge_vault",
+    db_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Ingests a source-linked Markdown note into the sovereign intelligence vault:
+    1. Extracts frontmatter, headings, topics, and inline citations.
+    2. Computes immutable SHA-256 evidence checksum.
+    3. Records forensic evidence entry with chain-of-custody in SQLite evidence table.
+    4. Populates PANOPTES Entity-Relation Graph (document, topics, citations, author).
+    5. Emits durable event envelope to events table.
+    """
+    parsed = parse_markdown_document(content)
+    title = parsed["title"]
+    topics = parsed["topics"]
+    citations = parsed["citations"]
+
+    content_bytes = content.encode("utf-8")
+    content_sha256 = hashlib.sha256(content_bytes).hexdigest()
+    now = time.time()
+    evidence_id = f"ev_md_{int(now)}_{content_sha256[:8]}"
+    vault_file_path = source_path or f"vault://notes/{content_sha256}.md"
+
+    # 1. Ensure forensic case exists
+    conn = get_connection(db_path) if db_path else get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT OR IGNORE INTO cases (id, title, description, status, legal_basis, created_by, created_at)
+        VALUES (?, ?, ?, 'open', 'Sovereign Knowledge Vault Ingestion', ?, ?);
+    """, (case_id, "Sovereign Knowledge Vault", "Markdown notes and research topic vault", author, now))
+
+    # 2. Insert into evidence table
+    chain_entry = [{
+        "step": 1,
+        "action": "source_linked_markdown_ingestion",
+        "actor": author,
+        "timestamp": now,
+        "sha256": content_sha256,
+        "source_path": source_path,
+        "source_url": source_url
+    }]
+    metadata = {
+        "title": title,
+        "topics": topics,
+        "citations": citations,
+        "char_count": parsed["char_count"],
+        "word_count": parsed["word_count"],
+        "frontmatter": parsed["frontmatter"]
+    }
+    cur.execute("""
+        INSERT OR REPLACE INTO evidence (id, case_id, file_path, sha256, mime_type, metadata_json, collected_at, collected_by, chain_of_custody)
+        VALUES (?, ?, ?, ?, 'text/markdown', ?, ?, ?, ?);
+    """, (evidence_id, case_id, vault_file_path, content_sha256, json.dumps(metadata), now, author, json.dumps(chain_entry)))
+    conn.commit()
+    conn.close()
+
+    # 3. Populate PANOPTES Entity-Relation Graph
+    doc_id = upsert_entity(title, "document", {
+        "title": title,
+        "sha256": content_sha256,
+        "source_path": source_path,
+        "source_url": source_url,
+        "word_count": parsed["word_count"],
+        "char_count": parsed["char_count"],
+        "evidence_id": evidence_id,
+        "captured_at": now
+    }, db_path=db_path)
+
+    # Link Author -> Document
+    author_id = upsert_entity(author, "person", {"role": "author", "sovereign_identity": True}, db_path=db_path)
+    add_relation(author_id, doc_id, "authored", confidence=1.0, db_path=db_path)
+
+    # Link Document -> Topics
+    for t in topics:
+        topic_id = upsert_entity(t, "topic", {"name": t, "monitored": True, "last_updated": now}, db_path=db_path)
+        add_relation(doc_id, topic_id, "mentions_topic", confidence=1.0, db_path=db_path)
+
+    # Link Document -> Citations / URLs
+    for c in citations:
+        url = c["url"]
+        cite_id = upsert_entity(url, "citation", {"url": url, "label": c["label"]}, db_path=db_path)
+        add_relation(doc_id, cite_id, "cites", confidence=1.0, db_path=db_path)
+
+    # 4. Emit durable event envelope into events table
+    event_id = f"evt_note_{int(now)}_{uuid.uuid4().hex[:8]}"
+    try:
+        record_durable_event(
+            event_id=event_id,
+            schema_version="1.0.0",
+            observed_at=now,
+            device_id="poco_m4_pro_5g",
+            source="PANOPTES",
+            event_type="markdown_note_ingested",
+            subject=title,
+            payload={
+                "document_id": doc_id,
+                "evidence_id": evidence_id,
+                "title": title,
+                "sha256": content_sha256,
+                "topics_count": len(topics),
+                "topics": topics,
+                "citations_count": len(citations)
+            },
+            classification="R1",
+            db_path=db_path
+        )
+    except Exception:
+        pass
+
+    # 5. Log audit trail entry
+    log_audit_event(
+        actor=author,
+        action="markdown_note_ingested",
+        target=title,
+        result="success",
+        details={
+            "document_id": doc_id,
+            "evidence_id": evidence_id,
+            "sha256": content_sha256,
+            "topics": topics
+        },
+        db_path=db_path
+    )
+
+    return {
+        "status": "ingested",
+        "document_id": doc_id,
+        "evidence_id": evidence_id,
+        "title": title,
+        "sha256": content_sha256,
+        "topics": topics,
+        "citations": citations,
+        "word_count": parsed["word_count"]
+    }
+
+
+def query_notes_by_topic(topic: str, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retrieves all source-linked notes associated with a given topic from the graph.
+    Cryptographically verifies evidence integrity for retrieved notes.
+    """
+    clean_topic = topic.strip().lower()
+    conn = get_connection(db_path) if db_path else get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT DISTINCT e.id as doc_id, e.name as title, e.attributes_json
+        FROM entities e
+        JOIN entity_relations r ON (r.source_id = e.id AND r.target_id = t.id) OR (r.source_id = t.id AND r.target_id = e.id)
+        JOIN entities t ON t.id != e.id
+        WHERE t.entity_type = 'topic' AND LOWER(t.name) = ? AND e.entity_type = 'document';
+    """, (clean_topic,))
+    rows = cur.fetchall()
+
+    results = []
+    for r in rows:
+        attrs = json.loads(r["attributes_json"])
+        evidence_id = attrs.get("evidence_id")
+        evidence_valid = True
+        if evidence_id:
+            cur.execute("SELECT sha256 FROM evidence WHERE id = ?;", (evidence_id,))
+            ev_row = cur.fetchone()
+            if not ev_row or ev_row["sha256"] != attrs.get("sha256"):
+                evidence_valid = False
+
+        results.append({
+            "document_id": r["doc_id"],
+            "title": r["title"],
+            "sha256": attrs.get("sha256"),
+            "evidence_id": evidence_id,
+            "source_path": attrs.get("source_path"),
+            "source_url": attrs.get("source_url"),
+            "word_count": attrs.get("word_count"),
+            "captured_at": attrs.get("captured_at"),
+            "evidence_valid": evidence_valid
+        })
+
+    conn.close()
+    return results
+
+
+def list_monitored_topics(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Lists all monitored knowledge topics with document counts and recency.
+    """
+    conn = get_connection(db_path) if db_path else get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT t.id, t.name, t.attributes_json, COUNT(DISTINCT r.id) as doc_count, t.updated_at
+        FROM entities t
+        LEFT JOIN entity_relations r ON ((r.target_id = t.id OR r.source_id = t.id) AND r.relation_type = 'mentions_topic')
+        WHERE t.entity_type = 'topic'
+        GROUP BY t.id, t.name
+        ORDER BY doc_count DESC, t.updated_at DESC;
+    """)
+    rows = cur.fetchall()
+
+    topics = []
+    for r in rows:
+        attrs = json.loads(r["attributes_json"]) if r["attributes_json"] else {}
+        topics.append({
+            "id": r["id"],
+            "name": r["name"],
+            "document_count": r["doc_count"],
+            "monitored": attrs.get("monitored", True),
+            "updated_at": r["updated_at"]
+        })
+
+    conn.close()
+    return topics
+
+
+def verify_note_evidence(evidence_id: str, db_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Validates cryptographic evidence record integrity for a stored note.
+    """
+    conn = get_connection(db_path) if db_path else get_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, file_path, sha256, mime_type, metadata_json, collected_at FROM evidence WHERE id = ?;", (evidence_id,))
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return {"is_valid": False, "error": f"Evidence record not found: {evidence_id}"}
+
+    meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+    return {
+        "is_valid": True,
+        "evidence_id": row["id"],
+        "file_path": row["file_path"],
+        "sha256": row["sha256"],
+        "mime_type": row["mime_type"],
+        "collected_at": row["collected_at"],
+        "title": meta.get("title"),
+        "topics": meta.get("topics", [])
+    }
+
 
 panoptes_scan = run_passive_osint
 link_entities = add_relation

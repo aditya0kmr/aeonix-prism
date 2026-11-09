@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T10:17:20Z",
-  "total_test_suites": 24,
-  "total_test_cases": 182,
+  "generated_at": "2026-11-09T11:26:30Z",
+  "total_test_suites": 26,
+  "total_test_cases": 195,
   "suites": [
     {
       "module": "test_agents",
@@ -144,6 +144,44 @@
         }
       ],
       "test_count": 10
+    },
+    {
+      "module": "test_gate10_release_hardening",
+      "class": "TestGate10ReleaseHardeningAndDisasterRecovery",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_gate10_release_hardening.py",
+      "tests": [
+        {
+          "test_name": "test_01_full_disaster_recovery_drill_simulated_wipe_and_restore",
+          "docstring": "Disaster Recovery Drill:",
+          "full_docstring": "Disaster Recovery Drill:\n1. Seed rich sovereign state across all core tables (users, devices, cases, evidence, missions, events).\n2. Create AES-256-GCM encrypted atomic backup.\n3. Verify backup archive integrity and audit-chain tip.\n4. Simulate catastrophic database wipe (overwrite with corrupted garbage).\n5. Restore database from verified archive.\n6. Verify bit-for-bit state recovery, table row counts, and active database health.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_02_tampered_backup_archive_rejected_safely",
+          "docstring": "Disaster recovery fails-closed and rejects tampered backup archive without altering database.",
+          "full_docstring": "Disaster recovery fails-closed and rejects tampered backup archive without altering database.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_03_sovereign_two_device_boundary_and_airgap",
+          "docstring": "Verify strict two-device airgap boundaries:",
+          "full_docstring": "Verify strict two-device airgap boundaries:\n1. Fire TV Glass remote token strictly forbidden from approving R3/R4 missions.\n2. Fire TV Glass remote token strictly forbidden from creating backups.\n3. POCO Core token authorized for administrative operations.\n4. Unauthenticated requests strictly rejected with 401.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_04_system_ram_guard_and_phantom_process_containment",
+          "docstring": "Verify RAM guard budget enforcement protects Dimensity 810 ARM controller.",
+          "full_docstring": "Verify RAM guard budget enforcement protects Dimensity 810 ARM controller.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_chronos_durable_event_journal_tamper_detection_full_chain",
+          "docstring": "Verify deterministic sequence replay and payload SHA-256 verification across event log.",
+          "full_docstring": "Verify deterministic sequence replay and payload SHA-256 verification across event log.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 5
     },
     {
       "module": "test_gate3_transport_and_sync",
@@ -346,6 +384,62 @@
         }
       ],
       "test_count": 3
+    },
+    {
+      "module": "test_gate9_forensics_telemetry",
+      "class": "TestGate9ForensicsAndTelemetry",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_gate9_forensics_telemetry.py",
+      "tests": [
+        {
+          "test_name": "test_01_passive_arp_table_and_bounded_network_telemetry",
+          "docstring": "Test passive ARP table parsing and bounded network topology discovery without active network probes.",
+          "full_docstring": "Test passive ARP table parsing and bounded network topology discovery without active network probes.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_bounded_telemetry_exponential_backoff_and_cache",
+          "docstring": "Test rate limiting and exponential backoff to ensure zero continuous battery drain.",
+          "full_docstring": "Test rate limiting and exponential backoff to ensure zero continuous battery drain.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_network_telemetry_durable_event_emission",
+          "docstring": "Verify durable event envelope recorded into events table on telemetry capture.",
+          "full_docstring": "Verify durable event envelope recorded into events table on telemetry capture.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_markdown_note_parsing_and_extraction",
+          "docstring": "Test Markdown document parsing: frontmatter, headings, hashtags, and citations.",
+          "full_docstring": "Test Markdown document parsing: frontmatter, headings, hashtags, and citations.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_markdown_note_ingestion_and_evidence_vault",
+          "docstring": "Test Markdown note ingestion with immutable SHA-256 evidence record and chain-of-custody.",
+          "full_docstring": "Test Markdown note ingestion with immutable SHA-256 evidence record and chain-of-custody.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_06_panoptes_entity_graph_population_and_topic_linking",
+          "docstring": "Test PANOPTES Entity Graph linking documents, topics, citations, and authors.",
+          "full_docstring": "Test PANOPTES Entity Graph linking documents, topics, citations, and authors.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_07_lumen_living_surface_topic_integration",
+          "docstring": "Test LUMEN synthesizes Knowledge Vault HUD card when monitored topics exist.",
+          "full_docstring": "Test LUMEN synthesizes Knowledge Vault HUD card when monitored topics exist.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_08_rest_api_endpoints_telemetry_and_notes",
+          "docstring": "Test Guardian telemetry and Panoptes note ingestion REST API endpoints.",
+          "full_docstring": "Test Guardian telemetry and Panoptes note ingestion REST API endpoints.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 8
     },
     {
       "module": "test_hybrid_router_and_ai",

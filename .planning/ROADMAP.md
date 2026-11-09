@@ -62,12 +62,12 @@
 * **Exit Gate:** Live mission executed with verified audit receipt. [VERIFIED: 182/182 portable tests PASS]
 
 ### Phase 9: Gate G9 — Forensic & Telemetry Expansion
-* [ ] Task 9.1: Bounded network topology telemetry and local device inventory.
-* [ ] Task 9.2: Topic monitoring and source-linked markdown note ingestion.
-* **Exit Gate:** Passive observations ingested without background battery drain.
+* [x] Task 9.1: Bounded network topology telemetry and local device inventory (`core/guardian.py` passive ARP, exponential backoff, SHA-256 evidence digest, durable event emission).
+* [x] Task 9.2: Topic monitoring and source-linked markdown note ingestion (`core/panoptes.py`, `core/lumen.py` HUD card, entity-relation graph, evidence vault integrity verification).
+* **Exit Gate:** Passive observations ingested without background battery drain. [VERIFIED: 190/190 portable tests PASS]
 
 ### Phase 10: Gate G10 — Release Hardening, Restore Drill & Verification Audit
-* [ ] Task 10.1: Full disaster recovery drill: simulate database wipe and restore from verified backup.
-* [ ] Task 10.2: Security regression test run across all 151+ test cases.
-* [ ] Task 10.3: Final evidence package and user handbook generation.
-* **Exit Gate:** Clean disaster restore pass, 0 security warnings, production sign-off.
+* [x] Task 10.1: Full disaster recovery drill: simulate database wipe and restore from verified backup (`core/backup.py`, atomic AES-256-GCM restoration, PRAGMA wal_checkpoint TRUNCATE, bit-for-bit record parity).
+* [x] Task 10.2: Security regression test run across all 195 test cases (100.0% pass rate in 83.0s, production isolation verified unchanged).
+* [x] Task 10.3: Final evidence package and user handbook generation (`docs/master_verification_and_audit_report.md`, `docs/test_run_artifact.json`, `docs/test_inventory.json`).
+* **Exit Gate:** Clean disaster restore pass, 0 security warnings, production sign-off. [VERIFIED: 195/195 portable tests PASS; G0–G10 100% COMPLETE]

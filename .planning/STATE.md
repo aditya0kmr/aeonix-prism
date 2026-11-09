@@ -71,7 +71,36 @@
   - 3 new unit tests added in `tests/test_gate8_governed_mission.py`.
   - Test inventory expanded to **182 tests across 24 suites** (100% PASS in 90.8s with verified production isolation).
 
+* [x] **Phase 9: Gate G9 (Forensic & Telemetry Expansion):**
+  - Implemented bounded network topology telemetry with exponential backoff (initial 60s, doubling on stable inventory up to 3600s), eliminating continuous background CPU and battery drain.
+  - Implemented passive ARP table parsing with Android 13 SELinux sandbox containment and fallback to sovereign whitelist.
+  - Implemented deterministic SHA-256 evidence digest generation across discovered inventory and automatic envelope recording to durable `events` journal (`1.0.0` schema, monotonic server sequence).
+  - Implemented source-linked Markdown note ingestion engine (`ingest_markdown_note` in `core/panoptes.py`): extracts YAML frontmatter, headings, hashtags, and citations, with cryptographic SHA-256 evidence vault recording and chain-of-custody.
+  - Ingested entities and relations into PANOPTES Entity Graph (`document`, `topic`, `citation`, `person`), with `mentions_topic`, `cites`, and `authored` edges.
+  - Implemented topic monitoring query engine (`query_notes_by_topic`, `list_monitored_topics`, `verify_note_evidence`) and integrated Living Surface HUD context in `core/lumen.py`.
+  - Added REST API routes: `/api/guardian/telemetry`, `/api/panoptes/ingest-note`, `/api/panoptes/topics`, `/api/panoptes/topics/notes`.
+  - 8 new unit tests added in `tests/test_gate9_forensics_telemetry.py`.
+  - Test inventory expanded to **190 tests across 25 suites** (100% PASS in 86.4s).
+* [x] **Phase 10: Gate G10 (Release Hardening, Disaster Recovery Drill & Production Sign-Off):**
+  - Executed full disaster recovery drill: seeded rich sovereign state across all core tables, executed atomic AES-256-GCM encrypted backup (`create_vault_backup`), verified archive integrity (`verify_backup`), simulated catastrophic database wipe (overwriting database with corrupt garbage bytes), and executed atomic disaster recovery (`restore_vault_backup`).
+  - Bit-for-bit record recovery verified across cases, evidence, missions, and durable events; audit chain tip verified; SQLite full low-level integrity check (`PRAGMA integrity_check`) verified `ok`.
+  - Verified fail-closed security: corrupted and tampered backup archives strictly rejected prior to restoration without altering database state.
+  - Verified two-device airgap boundary: Fire TV Glass remote token strictly forbidden from creating backups, accessing operator console, or claiming R3/R4 missions (403 Forbidden).
+  - Verified Dimensity 810 RAM guard budget (> 600 MB threshold, < 24 child processes) strictly enforced.
+  - 5 new unit tests added in `tests/test_gate10_release_hardening.py`.
+  - Test inventory expanded to **195 tests across 26 suites** (100.0% PASS in 83.0s with bit-for-bit production isolation verified).
+
 ---
 
-## Next Step
-Proceed to Phase 9 (Gate G9): Forensic & Telemetry Expansion.
+## Project Status: ALL GATES G0–G10 100% COMPLETE & VERIFIED
+- **Physical & Repository Baseline (Gate G0):** VERIFIED
+- **Build & Deploy Spike - TV APK (Gate G1):** VERIFIED (3.2 MB APK, Gradle 8.9, Termux on-device build)
+- **Security Spine & POCO Approval Interface (Gate G2):** VERIFIED (/operator console, zero external CDN)
+- **Core Transport & State Resync (Gate G3):** VERIFIED (TLS SAN certs, 32 KiB control frames, sync_request)
+- **Chronos Durable Events & Integrity Proofs (Gate G4):** VERIFIED (events journal, replay tamper detection)
+- **PRISM TV Living Surface (Gate G5):** VERIFIED (302/302 launcher unit tests PASS, RTL boundary safety)
+- **Local Intelligence - Burst-Only Inference (Gate G6):** VERIFIED (<50ms fast-path router, 0.5B GGUF burst)
+- **VOX Push-to-Talk Audio Pipeline (Gate G7):** VERIFIED (VAD RMS energy, offline whisper-cli ASR)
+- **Governed Missions (Gate G8):** VERIFIED (10-state lifecycle, Action Digest binding, Sentinel receipts)
+- **Forensic & Telemetry Expansion (Gate G9):** VERIFIED (bounded network telemetry, note ingestion, graph)
+- **Release Hardening & Disaster Recovery (Gate G10):** VERIFIED (catastrophic wipe & restore drill, 195/195 tests PASS)
