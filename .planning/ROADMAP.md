@@ -20,10 +20,10 @@
 * **Exit Gate:** Reproducible TV APK built directly on phone in Termux. [VERIFIED]
 
 ### Phase 2: Gate G2 — Security Spine & POCO Approval Interface
-* [ ] Task 2.1: Enforce loopback/private IP binding and strict authentication headers.
-* [ ] Task 2.2: Implement POCO Mobile Operator Console web UI for single-tap R3/R4 mission approval/denial.
-* [ ] Task 2.3: Verify append-only cryptographic audit chain and fail-closed rate-limiting.
-* **Exit Gate:** Operator approval flow verified in browser; unapproved R3/R4 actions strictly rejected.
+* [x] Task 2.1: Enforce loopback/private IP binding and strict authentication headers.
+* [x] Task 2.2: Implement POCO Mobile Operator Console web UI for single-tap R3/R4 mission approval/denial (`core/operator_ui.py`, `/operator` and `/console` routes).
+* [x] Task 2.3: Verify append-only cryptographic audit chain and fail-closed rate-limiting (155/155 test suites passed).
+* **Exit Gate:** Operator approval flow verified in browser; unapproved R3/R4 actions strictly rejected. [VERIFIED]
 
 ### Phase 3: Gate G3 — Core Transport, Certificate Pinning & State Resync
 * [ ] Task 3.1: Generate self-signed CA and device certificate with documented rotation flow.

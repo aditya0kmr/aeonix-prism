@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-31T15:24:02Z",
-  "total_test_suites": 18,
-  "total_test_cases": 151,
+  "generated_at": "2026-11-09T08:43:19Z",
+  "total_test_suites": 19,
+  "total_test_cases": 155,
   "suites": [
     {
       "module": "test_agents",
       "class": "TestAgentSystem",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_agents.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_agents.py",
       "tests": [
         {
           "test_name": "test_analyst_correlation",
@@ -80,7 +80,7 @@
     {
       "module": "test_boundary_auth_inventory",
       "class": "TestBoundaryAuthInventory",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_boundary_auth_inventory.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_boundary_auth_inventory.py",
       "tests": [
         {
           "test_name": "test_01_dynamic_route_inventory_default_deny_unauthenticated",
@@ -148,7 +148,7 @@
     {
       "module": "test_hybrid_router_and_ai",
       "class": "TestHybridRouterAndAI",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_hybrid_router_and_ai.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_hybrid_router_and_ai.py",
       "tests": [
         {
           "test_name": "test_local_llm_benchmark_execution",
@@ -192,7 +192,7 @@
     {
       "module": "test_master_system",
       "class": "TestMasterSystemEngines",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_master_system.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_master_system.py",
       "tests": [
         {
           "test_name": "test_aadya_priority_and_radar",
@@ -296,7 +296,7 @@
     {
       "module": "test_narrow_fs_allowlist",
       "class": "TestNarrowFsAllowlistAndClaimFinalization",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_narrow_fs_allowlist.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_narrow_fs_allowlist.py",
       "tests": [
         {
           "test_name": "test_01_narrow_fs_allowlist_positive_containment",
@@ -340,7 +340,7 @@
     {
       "module": "test_negative_security_and_auth",
       "class": "TestNegativeSecurityAndAuth",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_negative_security_and_auth.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_negative_security_and_auth.py",
       "tests": [
         {
           "test_name": "test_01_forged_or_invalid_token_rejected",
@@ -426,7 +426,7 @@
     {
       "module": "test_operator_lockout_failclosed",
       "class": "TestOperatorLockoutFailClosed",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_operator_lockout_failclosed.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_operator_lockout_failclosed.py",
       "tests": [
         {
           "test_name": "test_01_atomic_write_creates_valid_json",
@@ -468,9 +468,41 @@
       "test_count": 6
     },
     {
+      "module": "test_operator_ui",
+      "class": "TestOperatorUI",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_operator_ui.py",
+      "tests": [
+        {
+          "test_name": "test_01_operator_console_html_accessible",
+          "docstring": "Verify /operator loads 200 OK HTML with mobile UI tokens.",
+          "full_docstring": "Verify /operator loads 200 OK HTML with mobile UI tokens.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_console_alias_accessible",
+          "docstring": "Verify /console alias route mirrors /operator.",
+          "full_docstring": "Verify /console alias route mirrors /operator.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_public_endpoints_contains_operator",
+          "docstring": "Verify PUBLIC_ENDPOINTS allowlist permits /operator and /console.",
+          "full_docstring": "Verify PUBLIC_ENDPOINTS allowlist permits /operator and /console.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_approval_strictly_requires_operator_passphrase_and_digest",
+          "docstring": "Verify resolving sentinel request without passphrase fails 403.",
+          "full_docstring": "Verify resolving sentinel request without passphrase fails 403.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 4
+    },
+    {
       "module": "test_phase3",
       "class": "TestPhase3Arsenal",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase3.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_phase3.py",
       "tests": [
         {
           "test_name": "test_atlas_watch_supervisor",
@@ -508,7 +540,7 @@
     {
       "module": "test_phase4",
       "class": "TestPhase4CinemaAndSanctuary",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase4.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_phase4.py",
       "tests": [
         {
           "test_name": "test_fast_path_cinema_and_sanctuary_triggers",
@@ -534,7 +566,7 @@
     {
       "module": "test_phase4_panoptes_guardian",
       "class": "TestPhase4PanoptesAndGuardian",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase4_panoptes_guardian.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_phase4_panoptes_guardian.py",
       "tests": [
         {
           "test_name": "test_entity_graph_upsert_and_traversal",
@@ -578,7 +610,7 @@
     {
       "module": "test_phase5",
       "class": "TestPhase5ForgeAndVisia",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase5.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_phase5.py",
       "tests": [
         {
           "test_name": "test_fast_path_forge_triggers",
@@ -616,7 +648,7 @@
     {
       "module": "test_phase5_veritas_forge",
       "class": "TestPhase5VeritasAndForge",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase5_veritas_forge.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_phase5_veritas_forge.py",
       "tests": [
         {
           "test_name": "test_forge_git_telemetry_live",
@@ -666,7 +698,7 @@
     {
       "module": "test_phase6",
       "class": "TestPhase6SovereignMesh",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_phase6.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_phase6.py",
       "tests": [
         {
           "test_name": "test_backup_create_and_verify",
@@ -704,7 +736,7 @@
     {
       "module": "test_poco_bearer_bypass_and_digest",
       "class": "TestPocoBearerBypassAndDigestBinding",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_poco_bearer_bypass_and_digest.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_poco_bearer_bypass_and_digest.py",
       "tests": [
         {
           "test_name": "test_01_db_level_bearer_alone_approval_rejected",
@@ -772,7 +804,7 @@
     {
       "module": "test_restore_coordination_and_writer_lock",
       "class": "TestRestoreCoordinationAndWriterLock",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_restore_coordination_and_writer_lock.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_restore_coordination_and_writer_lock.py",
       "tests": [
         {
           "test_name": "test_01_active_writer_blocked_during_maintenance",
@@ -804,7 +836,7 @@
     {
       "module": "test_stage1_security",
       "class": "TestStage1Security",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_stage1_security.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_stage1_security.py",
       "tests": [
         {
           "test_name": "test_auth_token_expiration",
@@ -914,7 +946,7 @@
     {
       "module": "test_stage2_correctness",
       "class": "TestStage2BackendCorrectness",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_stage2_correctness.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_stage2_correctness.py",
       "tests": [
         {
           "test_name": "test_aadya_priority_with_hardware_context",
@@ -1006,7 +1038,7 @@
     {
       "module": "test_stage3_disaster_recovery",
       "class": "TestStage3DisasterRecovery",
-      "file_path": "/data/data/com.termux/files/home/aeonix/tests/test_stage3_disaster_recovery.py",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_stage3_disaster_recovery.py",
       "tests": [
         {
           "test_name": "test_backup_verification_and_hash_comparison",

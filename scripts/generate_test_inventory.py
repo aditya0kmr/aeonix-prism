@@ -22,8 +22,8 @@ os.environ["AEONIX_TEST_MODE"] = "1"
 os.environ["AEONIX_SECRETS_DIR"] = _SEC
 os.environ["AEONIX_DB_PATH"] = _DB
 
-sys.path.insert(0, "/data/data/com.termux/files/home")
-sys.path.insert(0, "/data/data/com.termux/files/home/aeonix")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_ROOT)
 
 from aeonix.core.db import init_database
 from aeonix.core.operator_console import setup_operator_secret
@@ -33,8 +33,8 @@ try:
 except Exception:
     pass
 
-TESTS_DIR = "/data/data/com.termux/files/home/aeonix/tests"
-OUTPUT_PATH = "/data/data/com.termux/files/home/aeonix/docs/test_inventory.json"
+TESTS_DIR = os.path.join(_REPO_ROOT, "tests")
+OUTPUT_PATH = os.path.join(_REPO_ROOT, "docs", "test_inventory.json")
 
 
 def generate_inventory():

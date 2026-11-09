@@ -1,7 +1,7 @@
 # ÆTHERION / ÆONIX PRISM // Project State
 
 **Active Milestone:** Milestone 1 (Gates G0–G3: Foundation & Core Connection)  
-**Active Phase:** Phase 2 (Gate G2: Security Spine & POCO Approval Interface)  
+**Active Phase:** Phase 3 (Gate G3: Core Transport, Certificate Pinning & State Resync)  
 **Last Updated:** November 9, 2026
 
 ---
@@ -21,14 +21,20 @@
     - Path: `app/build/outputs/apk/debug/app-debug.apk`
     - Size: **3.2 MB** (Limit: < 30 MB)
     - SHA-256: `d03d9cf79111202366cc6168e088b72f9bd0b85f4de2c70ce252c412e06a2682`
-* [ ] **Phase 2: Gate G2 (Security Spine & POCO Approval Interface):** Next in queue.
+* [x] **Phase 2: Gate G2 (Security Spine & POCO Approval Interface):**
+  - Implemented standalone mobile browser Operator Console (`core/operator_ui.py`) served on `/operator` and `/console`.
+  - Zero-external-CDN UI with live Sentinel review deck, Action Digest display, modal passphrase challenge, and emergency Sanctuary killswitch.
+  - Added `tests/test_operator_ui.py` (4 tests) verifying HTML delivery, public allowlisting, passphrase requirement, and Fire TV approval rejection.
+  - Updated inventory to 155 tests across 19 suites.
+  - Full portable test suite 100% passed (155/155 in 57.3s) with bit-for-bit production isolation verified.
+* [ ] **Phase 3: Gate G3 (Core Transport, Certificate Pinning & State Resync):** Next in queue.
 
 ---
 
 ## Blockers / Risks
-* None. Path A on-device APK compilation is fully functional and fast.
+* None. Gate G0, G1, and G2 verified and passing.
 
 ---
 
 ## Next Step
-Implement Gate G2: Verify and enhance the POCO Operator Console web interface (`/operator`) for single-tap approval/denial of R3/R4 missions, and audit the cryptographic signature chain.
+Proceed to Gate G3: Verify and harden the WSS/HTTPS certificate rotation, pairing flow, bounded message sizes (32 KiB), sequence-based state resync cursors, and heartbeat watchdog.

@@ -62,8 +62,11 @@ os.environ["AEONIX_TEST_MODE"] = "1"
 os.environ["AEONIX_SECRETS_DIR"] = _SANDBOX_SECRETS_DIR
 os.environ["AEONIX_DB_PATH"] = _SANDBOX_DB_PATH
 
+if os.path.dirname(REPO_DIR) not in sys.path:
+    sys.path.insert(0, os.path.dirname(REPO_DIR))
+if REPO_DIR in sys.path:
+    sys.path.remove(REPO_DIR)
 sys.path.insert(0, REPO_DIR)
-sys.path.insert(0, os.path.dirname(REPO_DIR))
 
 from aeonix.core.db import init_database
 from aeonix.core.operator_console import setup_operator_secret

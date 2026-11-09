@@ -8,7 +8,7 @@ import asyncio
 import base64
 from typing import List, Set, Tuple, Dict, Any, Optional
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 from starlette.middleware import Middleware
@@ -1206,6 +1206,11 @@ async def post_veritas_export_endpoint(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def get_operator_console(request):
+    """Serves the Sovereign POCO Operator Console review deck."""
+    from aeonix.core.operator_ui import OPERATOR_HTML
+    return HTMLResponse(OPERATOR_HTML)
+
 PUBLIC_ENDPOINTS = {
     ("GET", "/api/status"),
 }
@@ -1341,6 +1346,8 @@ middleware = [
 
 app = Starlette(
     routes=[
+        Route("/operator", get_operator_console, methods=["GET"]),
+        Route("/console", get_operator_console, methods=["GET"]),
         Route("/api/status", get_status, methods=["GET"]),
         Route("/api/system/status", get_system_status, methods=["GET"]),
         Route("/api/router/status", get_router_status_endpoint, methods=["GET"]),
