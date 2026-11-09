@@ -21,8 +21,8 @@ import sqlite3
 import tempfile
 import unittest
 
-sys.path.insert(0, "/data/data/com.termux/files/home/aeonix")
-sys.path.insert(0, "/data/data/com.termux/files/home")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_ROOT)
 
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect

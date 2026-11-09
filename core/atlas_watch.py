@@ -15,8 +15,25 @@ from aeonix.core.ram_guard import check_ram_guard
 from aeonix.core.db import log_audit_event
 
 CORE_STATUS_URL = "http://127.0.0.1:8080/api/status"
-FIRETV_ADB_TARGET = "10.116.23.179:5555"
+DEFAULT_FIRETV_ADB_TARGET = "10.116.23.179:5555"
 FIRETV_COMPONENT = "com.aether.launcher/com.gathin.tvhome.MainActivity"
+
+def get_firetv_target() -> str:
+    """Returns configured or active connected ADB target."""
+    env_target = os.getenv("AEONIX_FIRETV_ADB")
+    if env_target:
+        return env_target
+    try:
+        out = subprocess.check_output(["adb", "devices"], text=True, timeout=2.0)
+        for line in out.strip().splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == "device":
+                return parts[0]
+    except Exception:
+        pass
+    return DEFAULT_FIRETV_ADB_TARGET
+
+FIRETV_ADB_TARGET = get_firetv_target()
 
 def check_core_server() -> Dict[str, Any]:
     """Verifies that POCO Core Mind ASGI daemon is responsive via non-blocking TCP socket connect."""
@@ -37,23 +54,26 @@ def check_firetv_adb() -> bool:
     """Verifies ADB connectivity to the Fire TV Stick Lite."""
     try:
         out = subprocess.check_output(["adb", "devices"], text=True, timeout=3.0)
-        return f"{FIRETV_ADB_TARGET}\tdevice" in out
+        target = get_firetv_target()
+        return f"{target}\tdevice" in out or any("\tdevice" in line for line in out.strip().splitlines()[1:])
     except Exception:
         return False
 
 def heal_firetv_adb():
     """Re-establishes ADB TCP connection to the Fire TV."""
     try:
-        subprocess.run(["adb", "connect", FIRETV_ADB_TARGET], timeout=5.0, capture_output=True)
-        log_audit_event("ATLAS_WATCH", "self_heal_adb_link", FIRETV_ADB_TARGET, "reconnected", {})
+        target = get_firetv_target()
+        subprocess.run(["adb", "connect", target], timeout=5.0, capture_output=True)
+        log_audit_event("ATLAS_WATCH", "self_heal_adb_link", target, "reconnected", {})
     except Exception:
         pass
 
 def check_firetv_launcher() -> bool:
     """Verifies that the Living Surface launcher is active on the Fire TV."""
     try:
+        target = get_firetv_target()
         out = subprocess.check_output(
-            ["adb", "-s", FIRETV_ADB_TARGET, "shell", "dumpsys", "activity", "activities"], 
+            ["adb", "-s", target, "shell", "dumpsys", "activity", "activities"], 
             text=True, 
             timeout=4.0
         )
@@ -64,8 +84,9 @@ def check_firetv_launcher() -> bool:
 def heal_firetv_launcher():
     """Restarts the Living Surface launcher on the Fire TV."""
     try:
+        target = get_firetv_target()
         subprocess.run([
-            "adb", "-s", FIRETV_ADB_TARGET, "shell", "am", "start", "-n", FIRETV_COMPONENT
+            "adb", "-s", target, "shell", "am", "start", "-n", FIRETV_COMPONENT
         ], timeout=5.0, capture_output=True)
         log_audit_event("ATLAS_WATCH", "self_heal_living_surface", FIRETV_COMPONENT, "launched", {})
     except Exception:

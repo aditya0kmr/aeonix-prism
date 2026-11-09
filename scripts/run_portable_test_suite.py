@@ -18,11 +18,12 @@ import unittest
 import subprocess
 from typing import Dict, List, Set, Any, Optional
 
+REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROD_SECRETS_DIR = "/data/data/com.termux/files/home/.aeonix/secrets"
-PROD_DB_PATH = "/data/data/com.termux/files/home/aeonix/data/aeonix_vault.db"
-TESTS_DIR = "/data/data/com.termux/files/home/aeonix/tests"
-OUTPUT_PATH = "/data/data/com.termux/files/home/aeonix/docs/test_run_artifact.json"
-INVENTORY_PATH = "/data/data/com.termux/files/home/aeonix/docs/test_inventory.json"
+PROD_DB_PATH = os.path.join(REPO_DIR, "data", "aeonix_vault.db")
+TESTS_DIR = os.path.join(REPO_DIR, "tests")
+OUTPUT_PATH = os.path.join(REPO_DIR, "docs", "test_run_artifact.json")
+INVENTORY_PATH = os.path.join(REPO_DIR, "docs", "test_inventory.json")
 
 
 def compute_file_hash(filepath: str) -> Optional[str]:
@@ -61,8 +62,8 @@ os.environ["AEONIX_TEST_MODE"] = "1"
 os.environ["AEONIX_SECRETS_DIR"] = _SANDBOX_SECRETS_DIR
 os.environ["AEONIX_DB_PATH"] = _SANDBOX_DB_PATH
 
-sys.path.insert(0, "/data/data/com.termux/files/home")
-sys.path.insert(0, "/data/data/com.termux/files/home/aeonix")
+sys.path.insert(0, REPO_DIR)
+sys.path.insert(0, os.path.dirname(REPO_DIR))
 
 from aeonix.core.db import init_database
 from aeonix.core.operator_console import setup_operator_secret
@@ -78,7 +79,7 @@ def get_git_provenance() -> Dict[str, Any]:
     """Capture source commit, dirty diff digest, and git status."""
     try:
         commit_res = subprocess.run(
-            ["git", "-C", "/data/data/com.termux/files/home/aeonix", "rev-parse", "HEAD"],
+            ["git", "-C", REPO_DIR, "rev-parse", "HEAD"],
             capture_output=True, text=True, check=True
         )
         commit = commit_res.stdout.strip()
@@ -87,7 +88,7 @@ def get_git_provenance() -> Dict[str, Any]:
 
     try:
         diff_res = subprocess.run(
-            ["git", "-C", "/data/data/com.termux/files/home/aeonix", "diff", "HEAD"],
+            ["git", "-C", REPO_DIR, "diff", "HEAD"],
             capture_output=True, check=True
         )
         diff_bytes = diff_res.stdout
@@ -100,7 +101,7 @@ def get_git_provenance() -> Dict[str, Any]:
 
     try:
         status_res = subprocess.run(
-            ["git", "-C", "/data/data/com.termux/files/home/aeonix", "status", "--short"],
+            ["git", "-C", REPO_DIR, "status", "--short"],
             capture_output=True, text=True, check=True
         )
         git_status = status_res.stdout.strip()

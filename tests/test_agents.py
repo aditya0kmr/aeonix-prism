@@ -16,8 +16,8 @@ Tests all 11 specialized agents and the multi-agent orchestrator:
 
 import sys
 import os
-sys.path.insert(0, "/data/data/com.termux/files/home/aeonix")
-sys.path.insert(0, "/data/data/com.termux/files/home")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_ROOT)
 import unittest
 from agents.navigator import NavigatorAgent
 from agents.collector import CollectorAgent
