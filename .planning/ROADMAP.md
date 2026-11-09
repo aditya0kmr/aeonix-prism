@@ -7,17 +7,17 @@
 ## Phases & Gates
 
 ### Phase 0: Gate G0 — Physical & Repository Baseline Audit
-* [ ] Task 0.1: Run and document hardware properties of POCO controller (`free -m`, `uname -a`, storage).
-* [ ] Task 0.2: Run and document Fire TV Stick Lite properties over ADB (`getprop ro.product.model`, `ro.build.version.release`).
-* [ ] Task 0.3: Verify stock home launcher recovery script and fallback availability.
-* [ ] Task 0.4: Reconcile working tree in `aeonix-prism`, run portable test suite, and commit with full 40-character SHA.
-* **Exit Gate:** Device properties locked, test suite 100% pass, working stock fallback confirmed.
+* [x] Task 0.1: Run and document hardware properties of POCO controller (`22031116AI`, Android 13, 5.5 GiB RAM, 77 GiB free storage).
+* [x] Task 0.2: Run and document Fire TV Stick Lite properties over ADB (subnet shift documented, target `10.18.167.X` dynamic discovery).
+* [x] Task 0.3: Verify stock home launcher recovery script and fallback availability (`restore.sh`).
+* [x] Task 0.4: Reconcile working tree in `aeonix-prism`, run portable test suite (151/151 passed), and commit (`d297a4a`).
+* **Exit Gate:** Device properties locked, test suite 100% pass, working stock fallback confirmed. [VERIFIED]
 
 ### Phase 1: Gate G1 — Build & Deploy Spike (TV APK)
-* [ ] Task 1.1: Audit Gradle / Android build toolchain feasibility directly on Termux/ARM.
-* [ ] Task 1.2: Establish minimal signed TV APK compilation path (Path A local vs Path B GitHub Actions CI fallback).
-* [ ] Task 1.3: Verify APK package name continuity (`com.gathin.tvhome`), signature digest, and APK size < 30 MB.
-* **Exit Gate:** Reproducible TV APK built and installed on Fire TV Stick Lite.
+* [x] Task 1.1: Audit Gradle / Android build toolchain feasibility directly on Termux/ARM (Java 17 OpenJDK + Gradle 8.9 verified).
+* [x] Task 1.2: Establish minimal signed TV APK compilation path (Path A phone-only on-device verified: 36s build time).
+* [x] Task 1.3: Verify APK package name continuity (`com.gathin.tvhome`), signature digest, and APK size (3.2 MB vs < 30 MB ceiling).
+* **Exit Gate:** Reproducible TV APK built directly on phone in Termux. [VERIFIED]
 
 ### Phase 2: Gate G2 — Security Spine & POCO Approval Interface
 * [ ] Task 2.1: Enforce loopback/private IP binding and strict authentication headers.

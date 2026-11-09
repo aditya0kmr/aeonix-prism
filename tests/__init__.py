@@ -1,7 +1,13 @@
 import os
+import sys
 import tempfile
 import atexit
 import shutil
+
+_TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_TESTS_DIR)
+sys.path.insert(0, _REPO_ROOT)
+sys.path.insert(0, os.path.dirname(_REPO_ROOT))
 
 # Guarantee test environment isolation from default operator secrets, lockout and live databases (Item 5)
 _TEST_SANDBOX_DIR = tempfile.mkdtemp(prefix="aeonix_test_sandbox_")
