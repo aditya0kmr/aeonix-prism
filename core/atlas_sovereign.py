@@ -53,7 +53,7 @@ EXPENDABLE_SIGNATURES = [
 ]
 
 class AtlasSovereignEngine:
-    def __init__(self, db_path: Optional[str] = None, enable_bg_threads: bool = True):
+    def __init__(self, db_path: Optional[str] = None, enable_bg_threads: bool = False, observe_only: Optional[bool] = None):
         if db_path:
             self.DB_PATH = db_path
         else:
@@ -61,6 +61,11 @@ class AtlasSovereignEngine:
                 "AEONIX_DB_PATH",
                 os.path.expanduser("~/aeonix/data/aeonix_vault.db")
             )
+
+        if observe_only is not None:
+            self.observe_only = observe_only
+        else:
+            self.observe_only = os.getenv("ATLAS_OBSERVE_ONLY", "true").lower() in ("true", "1", "yes")
 
         self.MAX_RAM_PERCENT = float(os.getenv("ATLAS_MAX_RAM_PERCENT", DEFAULT_MAX_RAM_PERCENT))
         self.MIN_FREE_RAM_BYTES = int(os.getenv("ATLAS_MIN_FREE_RAM_BYTES", DEFAULT_MIN_FREE_RAM_BYTES))
@@ -382,7 +387,7 @@ class AtlasSovereignEngine:
         if not all_user_procs:
             return None
 
-        # Priority 2: Look for explicit expendable AI or scraper signatures
+        # Priority 2: Look for explicit expendable AI or scraper signatures strictly
         for p in all_user_procs:
             try:
                 cmdline = " ".join(p.info.get('cmdline') or []).lower()
@@ -393,21 +398,9 @@ class AtlasSovereignEngine:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
 
-        # Priority 3: If child process limit breached, pick newest child process
-        if "CHILD" in reason:
-            try:
-                my_pid = os.getpid()
-                direct_children = [c for c in all_user_procs if c.ppid() == my_pid]
-                if direct_children:
-                    return sorted(direct_children, key=lambda p: p.create_time(), reverse=True)[0]
-            except Exception:
-                pass
-
-        # Priority 4: Heaviest memory consumer among non-protected user processes
-        try:
-            return max(all_user_procs, key=lambda p: p.info.get('memory_percent') or 0.0)
-        except Exception:
-            return all_user_procs[0] if all_user_procs else None
+        # Zero fallback to unrelated same-user processes:
+        # Heaviest memory consumers and non-PRISM processes are strictly immune.
+        return None
 
     # =========================================================================
     # 5. EXECUTION PIPELINE UPON THRESHOLD BREACH
@@ -504,32 +497,32 @@ class AtlasSovereignEngine:
         except Exception:
             pass
 
-        # Dispatch via local Starlette/FastAPI event gateway if live
-        try:
-            import urllib.request
-            req_data = json.dumps({
-                "source": "ATLAS_SOVEREIGN",
-                "event_type": "HARD_LIMIT_BREACH",
-                "subject": report.get("target_process", "system"),
-                "payload": report
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                "http://127.0.0.1:8080/events",
-                data=req_data,
-                headers={"Content-Type": "application/json"}
-            )
-            with urllib.request.urlopen(req, timeout=0.5):
+        # Dispatch via local Starlette/FastAPI event gateway if live and not in observe-only mode
+        if not getattr(self, "observe_only", True):
+            try:
+                import urllib.request
+                port = int(os.getenv("AEONIX_PORT", "8080"))
+                req_data = json.dumps({
+                    "source": "ATLAS_SOVEREIGN",
+                    "event_type": "HARD_LIMIT_BREACH",
+                    "subject": report.get("target_process", "system"),
+                    "payload": report
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{port}/events",
+                    data=req_data,
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=0.5):
+                    pass
+            except Exception:
                 pass
-        except Exception:
-            pass
 
     def kill_and_report(self, proc: psutil.Process, reason: str, metric_value: Any) -> Dict[str, Any]:
         """
-        Executes the deterministic 4-step emergency sequence in milliseconds:
-        1. Crash-Safe Checkpoint
-        2. Immediate Hard Termination (SIGKILL)
-        3. Tamper-Evident SHA-256 Audit Log
-        4. Instant Dispatch Telemetry Report
+        Executes the deterministic emergency sequence in milliseconds:
+        In observe-only mode (default): logs bounded diagnosis without secrets, sends zero signals.
+        In active mode (strictly disabled by default): executes state checkpoint and hard kill.
         """
         pid = proc.pid
         if pid in self.PROTECTED_PIDS:
@@ -540,6 +533,21 @@ class AtlasSovereignEngine:
             name = proc.name()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             name = "UnknownProcess"
+
+        # Observe-Only Guard: Zero signals, zero termination, zero checkpoint mutation
+        if getattr(self, "observe_only", True):
+            logger.info(f"[OBSERVE-ONLY] Breach observed for PID {pid} ({name}). Reason: {reason} [{metric_value}]. No signal sent.")
+            return {
+                "agent": "ATLAS_SOVEREIGN",
+                "event": "HARD_LIMIT_BREACH_OBSERVED",
+                "target_process": name,
+                "pid": pid,
+                "reason": reason,
+                "measured_value": str(metric_value),
+                "action_taken": "OBSERVE_ONLY_NO_ACTION",
+                "post_kill_stability": "OBSERVE_ONLY",
+                "timestamp": time.time()
+            }
 
         logger.critical(f"THRESHOLD BREACH! Hard Kill PID {pid} ({name}). Reason: {reason} [{metric_value}]")
 
@@ -632,23 +640,29 @@ class AtlasSovereignEngine:
         stuck = self.check_stuck_missions(force_check=False)
         for s in stuck:
             logger.warning(f"Stuck task detected: Mission {s['mission_id']} idle for {s['idle_seconds']}s")
-            try:
-                conn = sqlite3.connect(self.DB_PATH, timeout=1.0)
-                conn.execute(
-                    "UPDATE missions SET status = 'aborted', updated_at = ? WHERE id = ?;",
-                    (time.time(), s["mission_id"])
-                )
-                conn.commit()
-                conn.close()
-                actions_taken.append({"task_aborted": s["mission_id"], "idle_seconds": s["idle_seconds"]})
-            except Exception:
-                pass
+            if not getattr(self, "observe_only", True):
+                try:
+                    conn = sqlite3.connect(self.DB_PATH, timeout=1.0)
+                    conn.execute(
+                        "UPDATE missions SET status = 'aborted', updated_at = ? WHERE id = ?;",
+                        (time.time(), s["mission_id"])
+                    )
+                    conn.commit()
+                    conn.close()
+                    actions_taken.append({"task_aborted": s["mission_id"], "idle_seconds": s["idle_seconds"]})
+                except Exception:
+                    pass
+            else:
+                actions_taken.append({"task_stuck_observed": s["mission_id"], "idle_seconds": s["idle_seconds"], "action": "OBSERVE_ONLY"})
 
         # 5. Fire TV PSS Memory Check (<0.01ms non-blocking cache)
         firetv = self.get_firetv_telemetry(force_poll=False)
         if firetv["is_breached"]:
-            self.flush_firetv_memory()
-            actions_taken.append({"action": "FIRETV_MEMORY_FLUSHED", "pss_mb": firetv["pss_mb"]})
+            if not getattr(self, "observe_only", True):
+                self.flush_firetv_memory()
+                actions_taken.append({"action": "FIRETV_MEMORY_FLUSHED", "pss_mb": firetv["pss_mb"]})
+            else:
+                actions_taken.append({"action": "FIRETV_MEMORY_BREACH_OBSERVED", "pss_mb": firetv["pss_mb"]})
 
         # 6. SQLite WAL Checkpoint (<0.05ms)
         wal_stat = self.check_sqlite_wal()

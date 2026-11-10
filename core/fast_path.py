@@ -43,6 +43,9 @@ COMMAND_TRIGGERS = {
     "mode_surface": [
         "living surface", "home screen", "main screen", "ambient mode"
     ],
+    "live_link_check": [
+        "live link check", "transport verification", "ping tv", "link check"
+    ],
     "mode_iptv": [
         "live tv", "iptv", "open tv", "channels", "stream deck", "open cinema"
     ],
@@ -200,6 +203,15 @@ def execute_fast_path(action: str, actor: str = "Aadi") -> Dict[str, Any]:
             "type": "security"
         }
         screen = "sentinel_deck"
+
+    elif action == "live_link_check":
+        speech = "POCO core connected. Transport verification in progress."
+        card = {
+            "title": "ÆONIX PRISM — Live Link Check",
+            "content": "POCO core connected. Transport verification in progress.",
+            "type": "diagnostic"
+        }
+        screen = "living_surface"
 
     elif action == "missions":
         conn = get_connection()

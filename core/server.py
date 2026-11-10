@@ -87,14 +87,26 @@ def get_request_identity(request) -> Tuple[str, str]:
 
 # Connected Fire TV and client WebSockets
 active_connections: Set[WebSocket] = set()
-discovery_service = AeonixDiscoveryService(port=8080)
+
+def get_configured_port() -> int:
+    raw = os.getenv("AEONIX_PORT", "8080").strip()
+    try:
+        val = int(raw)
+        if not (1 <= val <= 65535):
+            raise ValueError(f"Port {val} is outside valid range [1, 65535]")
+        return val
+    except ValueError as e:
+        raise ValueError(f"Invalid AEONIX_PORT '{raw}': {e}") from None
+
+AEONIX_PORT = get_configured_port()
+discovery_service = AeonixDiscoveryService(port=AEONIX_PORT)
 
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: Starlette):
     init_database()
-    log_audit_event("SYSTEM", "daemon_start", "aeonix_core", "ok", {"port": 8080})
+    log_audit_event("SYSTEM", "daemon_start", "aeonix_core", "ok", {"port": AEONIX_PORT})
     try:
         from aeonix.core.governed_mission import governor
         reconciled = governor.reconcile_interrupted_missions()

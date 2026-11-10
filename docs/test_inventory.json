@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-10T17:33:46Z",
-  "total_test_suites": 33,
-  "total_test_cases": 269,
+  "generated_at": "2026-11-10T19:00:35Z",
+  "total_test_suites": 34,
+  "total_test_cases": 281,
   "suites": [
     {
       "module": "test_agents",
@@ -1812,6 +1812,86 @@
         }
       ],
       "test_count": 7
+    },
+    {
+      "module": "test_transport_and_warden_safety",
+      "class": "TestTransportAndWardenSafety",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_transport_and_warden_safety.py",
+      "tests": [
+        {
+          "test_name": "test_discovery_advertised_port",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_firetv_role_cannot_approve_sentinel",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_live_link_check_fast_path",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_port_validation_custom_valid",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_port_validation_default",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_port_validation_out_of_range",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_tls_missing_credentials_fails_closed",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_tls_pair_validation_success",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_unrelated_process_never_eligible",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_warden_observe_only_by_default",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_warden_observe_only_does_not_abort_missions",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_warden_observe_only_no_signals_or_kill",
+          "docstring": "",
+          "full_docstring": "",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 12
     },
     {
       "module": "test_voice_intent_pipeline",

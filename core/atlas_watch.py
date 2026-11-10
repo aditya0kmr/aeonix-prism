@@ -14,7 +14,17 @@ from typing import Dict, Any
 from aeonix.core.ram_guard import check_ram_guard
 from aeonix.core.db import log_audit_event
 
-CORE_STATUS_URL = "http://127.0.0.1:8080/api/status"
+def get_configured_port() -> int:
+    try:
+        val = int(os.getenv("AEONIX_PORT", "8080").strip())
+        if 1 <= val <= 65535:
+            return val
+    except Exception:
+        pass
+    return 8080
+
+AEONIX_PORT = get_configured_port()
+CORE_STATUS_URL = f"http://127.0.0.1:{AEONIX_PORT}/api/status"
 DEFAULT_FIRETV_ADB_TARGET = "10.116.23.179:5555"
 FIRETV_COMPONENT = "com.aether.launcher/com.gathin.tvhome.MainActivity"
 
@@ -39,7 +49,7 @@ def check_core_server() -> Dict[str, Any]:
     """Verifies that POCO Core Mind ASGI daemon is responsive via non-blocking TCP socket connect."""
     import socket
     try:
-        with socket.create_connection(("127.0.0.1", 8080), timeout=1.0):
+        with socket.create_connection(("127.0.0.1", AEONIX_PORT), timeout=1.0):
             return {"online": True}
     except Exception as e:
         return {"online": False, "error": str(e)}
@@ -136,10 +146,10 @@ def run_supervisor_cycle() -> Dict[str, Any]:
             heal_firetv_launcher()
             cycle_report["healed_actions"].append("living_surface_relaunched")
 
-    # 5. ATLAS SOVEREIGN Hardware Warden Pass
+    # 5. ATLAS SOVEREIGN Hardware Warden Pass (Strictly Observe-Only in Supervisor Cycle)
     try:
         from aeonix.core.atlas_sovereign import AtlasSovereignEngine
-        sovereign = AtlasSovereignEngine()
+        sovereign = AtlasSovereignEngine(enable_bg_threads=False, observe_only=True)
         sov_rep = sovereign.run_surveillance_pass()
         cycle_report["atlas_sovereign"] = {
             "execution_ms": sov_rep["execution_ms"],
@@ -150,7 +160,7 @@ def run_supervisor_cycle() -> Dict[str, Any]:
         }
         if not sov_rep.get("system_nominal", True):
             for act in sov_rep.get("actions_taken", []):
-                cycle_report["healed_actions"].append(f"sovereign_kill:{act.get('reason', 'breach')}")
+                cycle_report["healed_actions"].append(f"sovereign_observed:{act.get('reason', 'breach')}")
     except Exception as e:
         cycle_report["atlas_sovereign"] = {"error": str(e)}
             
