@@ -272,7 +272,7 @@ def run_portable_test_suite() -> int:
     artifact = {
         "metadata": {
             "environment": "POCO M4 Pro 5G (Termux Linux)",
-            "two_device_topology": "POCO M4 Pro 5G Core Mind (10.116.23.168) + Fire TV Stick Lite Glass Terminal (10.116.23.179)",
+            "two_device_topology": "POCO M4 Pro 5G Core Mind + Fire TV Stick Lite Glass Terminal (Zero-Cloud LAN)",
             "source_commit": git_prov["source_commit"],
             "dirty_digest": git_prov["dirty_digest"],
             "git_status": git_prov["git_status"],
