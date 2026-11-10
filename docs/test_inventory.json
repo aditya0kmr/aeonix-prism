@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-10T09:10:49Z",
-  "total_test_suites": 28,
-  "total_test_cases": 208,
+  "generated_at": "2026-11-10T09:45:44Z",
+  "total_test_suites": 29,
+  "total_test_cases": 218,
   "suites": [
     {
       "module": "test_agents",
@@ -1124,6 +1124,74 @@
           "test_name": "test_10_tls_and_pinned_handshake_negative_validation",
           "docstring": "Negative test for client TLS pin enforcement: rejects empty, null, or mismatched pin.",
           "full_docstring": "Negative test for client TLS pin enforcement: rejects empty, null, or mismatched pin.",
+          "is_negative_security_test": true
+        }
+      ],
+      "test_count": 10
+    },
+    {
+      "module": "test_poco_ptt_controller",
+      "class": "TestPocoPttController",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_poco_ptt_controller.py",
+      "tests": [
+        {
+          "test_name": "test_01_ptt_start_and_stop_on_release",
+          "docstring": "Verifies explicit user start, recording indicator, and stop on release.",
+          "full_docstring": "Verifies explicit user start, recording indicator, and stop on release.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_ptt_timeout_stop",
+          "docstring": "PTT held past max duration (15s) automatically triggers timeout stop.",
+          "full_docstring": "PTT held past max duration (15s) automatically triggers timeout stop.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_user_cancellation_and_buffer_wipe",
+          "docstring": "Cancelling PTT immediately releases mic and zeroes in-memory buffer.",
+          "full_docstring": "Cancelling PTT immediately releases mic and zeroes in-memory buffer.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_app_backgrounding_stop",
+          "docstring": "App losing focus or backgrounded halts recording immediately.",
+          "full_docstring": "App losing focus or backgrounded halts recording immediately.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_sentinel_lockdown_stop",
+          "docstring": "Engaging Sanctuary lockdown aborts active recording and wipes buffer.",
+          "full_docstring": "Engaging Sanctuary lockdown aborts active recording and wipes buffer.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_06_permission_denial_handling",
+          "docstring": "Missing binary or permission error fails gracefully with clean recovery instructions.",
+          "full_docstring": "Missing binary or permission error fails gracefully with clean recovery instructions.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_07_no_persistent_raw_audio_writes",
+          "docstring": "Verifies temp recording file is unlinked immediately upon stop, leaving disk clean.",
+          "full_docstring": "Verifies temp recording file is unlinked immediately upon stop, leaving disk clean.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_08_stt_submission_and_buffer_cleanup",
+          "docstring": "Submits audio to local STT, cleans buffer immediately, and logs audit event.",
+          "full_docstring": "Submits audio to local STT, cleans buffer immediately, and logs audit event.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_09_consequential_voice_intent_routes_to_sentinel",
+          "docstring": "Consequential commands ('delete vault', 'approve mission') flagged for Sentinel approval.",
+          "full_docstring": "Consequential commands ('delete vault', 'approve mission') flagged for Sentinel approval.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_10_stt_silence_rejection",
+          "docstring": "Silent buffers are rejected by VAD without invoking transcription cycles.",
+          "full_docstring": "Silent buffers are rejected by VAD without invoking transcription cycles.",
           "is_negative_security_test": true
         }
       ],
