@@ -135,6 +135,24 @@ def run_supervisor_cycle() -> Dict[str, Any]:
         if not launcher_ok:
             heal_firetv_launcher()
             cycle_report["healed_actions"].append("living_surface_relaunched")
+
+    # 5. ATLAS SOVEREIGN Hardware Warden Pass
+    try:
+        from aeonix.core.atlas_sovereign import AtlasSovereignEngine
+        sovereign = AtlasSovereignEngine()
+        sov_rep = sovereign.run_surveillance_pass()
+        cycle_report["atlas_sovereign"] = {
+            "execution_ms": sov_rep["execution_ms"],
+            "ram_percent": sov_rep["ram"]["percent"],
+            "thermal_c": sov_rep["thermal_c"],
+            "child_procs": sov_rep["child_procs"],
+            "system_nominal": sov_rep["system_nominal"]
+        }
+        if not sov_rep.get("system_nominal", True):
+            for act in sov_rep.get("actions_taken", []):
+                cycle_report["healed_actions"].append(f"sovereign_kill:{act.get('reason', 'breach')}")
+    except Exception as e:
+        cycle_report["atlas_sovereign"] = {"error": str(e)}
             
     return cycle_report
 

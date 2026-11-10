@@ -23,21 +23,35 @@ from aeonix.core.morph import (
 from aeonix.core.council import convene_council_session
 from aeonix.core.fast_path import match_fast_path, execute_fast_path
 
+import tempfile
+
 class TestPhase6SovereignMesh(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        init_database()
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        cls.test_db = os.path.join(cls.temp_dir.name, "test_phase6.db")
+        init_database(cls.test_db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp_dir.cleanup()
 
     def test_backup_create_and_verify(self):
         """Test atomic SQLite WAL backup and archive verification."""
-        res = create_vault_backup(actor="Aadi", note="Unit Test Snapshot")
+        passphrase = "TestSovereignPassphrase123!"
+        res = create_vault_backup(
+            actor="Aadi",
+            note="Unit Test Snapshot",
+            recovery_passphrase=passphrase,
+            db_path=self.test_db
+        )
         self.assertTrue(res["success"])
         self.assertTrue(os.path.exists(res["backup_path"]))
         self.assertGreater(res["size_bytes"], 1000)
         self.assertEqual(len(res["sha256"]), 64)
 
         # Verify integrity
-        v_res = verify_backup(res["backup_path"])
+        v_res = verify_backup(res["backup_path"], recovery_passphrase=passphrase)
         self.assertTrue(v_res["success"])
         self.assertTrue(v_res["is_intact"])
         self.assertEqual(v_res["integrity_check"], "ok")

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-10T12:33:35Z",
-  "total_test_suites": 32,
-  "total_test_cases": 264,
+  "generated_at": "2026-11-10T17:33:46Z",
+  "total_test_suites": 33,
+  "total_test_cases": 269,
   "suites": [
     {
       "module": "test_agents",
@@ -76,6 +76,44 @@
         }
       ],
       "test_count": 11
+    },
+    {
+      "module": "test_atlas_sovereign",
+      "class": "TestAtlasSovereign",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_atlas_sovereign.py",
+      "tests": [
+        {
+          "test_name": "test_active_mission_checkpointing",
+          "docstring": "Verifies that active missions are state-checkpointed and flushed to SQLite WAL upon breach.",
+          "full_docstring": "Verifies that active missions are state-checkpointed and flushed to SQLite WAL upon breach.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_audit_log_hash_chaining",
+          "docstring": "Verifies cryptographic tamper-evident SHA-256 hash chaining in audit_events.",
+          "full_docstring": "Verifies cryptographic tamper-evident SHA-256 hash chaining in audit_events.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_latency_under_5ms",
+          "docstring": "Verifies that a hardware surveillance pass executes in under 5ms.",
+          "full_docstring": "Verifies that a hardware surveillance pass executes in under 5ms.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_protected_pids_immunity",
+          "docstring": "Verifies that core server and self PIDs are completely immune to termination.",
+          "full_docstring": "Verifies that core server and self PIDs are completely immune to termination.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_stuck_task_detection",
+          "docstring": "Verifies detection and aborting of tasks hanging > 30 seconds.",
+          "full_docstring": "Verifies detection and aborting of tasks hanging > 30 seconds.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 5
     },
     {
       "module": "test_boundary_auth_inventory",
