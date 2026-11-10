@@ -1288,6 +1288,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openLiveTvAfterBoot()) return;
         updateGreeting();
         updatePanel();
+        if (aeonixClient != null) {
+            aeonixClient.reconnectImmediately();
+        }
+        if (getCurrentFocus() == null && grid != null) {
+            grid.requestFocus();
+        }
         // The network and Inputs pills keep their state while Home is in the background, and callbacks update them
         // when the network or the inputs change, so this refresh only catches anything missed. Its binder calls
         // (about 7 ms on a TCL C755, most of it WifiManager.getConnectionInfo) would hold up the first frame back
@@ -1573,10 +1579,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onDisconnected(String reason) {
                 android.util.Log.w("AeonixLauncher", "Disconnected from Core Mind: " + reason);
                 if (stats != null) {
-                    stats.setText("ÆONIX: OFFLINE (RECONNECTING...)");
+                    if ("POWER_SAVE_SLEEP".equals(reason)) {
+                        stats.setText("ÆONIX: SLEEP (POWER SAVE)");
+                    } else {
+                        stats.setText("ÆONIX: OFFLINE (RECONNECTING...)");
+                    }
                 }
                 if (heroCategoryText != null) {
-                    heroCategoryText.setText("⚠ OFFLINE STANDBY // LOCAL LAUNCHER ACTIVE");
+                    if ("POWER_SAVE_SLEEP".equals(reason)) {
+                        heroCategoryText.setText("💤 POWER SAVE STANDBY // SYSTEM SLEEPING");
+                    } else {
+                        heroCategoryText.setText("⚠ OFFLINE STANDBY // LOCAL LAUNCHER ACTIVE");
+                    }
                 }
             }
 
@@ -1936,8 +1950,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN
                     || code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT) {
                 com.gathin.tvhome.audio.CyberSoundSynth.get().playDataClick();
+                if (aeonixClient != null) {
+                    aeonixClient.sendText("{\"type\":\"dpad_nav\",\"keycode\":" + code + ",\"timestamp\":" + System.currentTimeMillis() + "}");
+                }
             } else if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER) {
                 com.gathin.tvhome.audio.CyberSoundSynth.get().playChirp();
+                if (aeonixClient != null) {
+                    aeonixClient.sendText("{\"type\":\"dpad_nav\",\"keycode\":" + code + ",\"timestamp\":" + System.currentTimeMillis() + "}");
+                }
             }
         }
         // Vendor keys (TCL Netflix button, 4062) never reach the key services, only the focused window.
