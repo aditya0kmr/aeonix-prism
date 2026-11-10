@@ -62,20 +62,26 @@ def generate_synthetic_pcm(duration_s: float = 1.0, freq_hz: float = 440.0, samp
 class TestPttConsoleAndEndpoints(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        init_database(os.environ["AEONIX_DB_PATH"])
+        os.environ["AEONIX_DB_PATH"] = _MODULE_DB
+        init_database(_MODULE_DB)
         cls.client = TestClient(app)
         cls.poco_token = issue_device_token("test_poco_console", ROLE_POCO_CORE)
         cls.tv_token = issue_device_token("test_tv_console", ROLE_FIRETV_GLASS)
 
     def setUp(self):
+        os.environ["AEONIX_DB_PATH"] = _MODULE_DB
+        init_database(_MODULE_DB)
         release_sanctuary(actor="TestRunner")
-        if _ptt_controller.is_recording():
-            _ptt_controller.cancel()
+        _ptt_controller.cancel()
+        _ptt_controller.release_lockdown()
+        _ptt_controller._state = PttState.IDLE
 
     def tearDown(self):
+        os.environ["AEONIX_DB_PATH"] = _MODULE_DB
         release_sanctuary(actor="TestRunner")
-        if _ptt_controller.is_recording():
-            _ptt_controller.cancel()
+        _ptt_controller.cancel()
+        _ptt_controller.release_lockdown()
+        _ptt_controller._state = PttState.IDLE
 
     # -------------------------------------------------------------------------
     # 1. Console Page Loads Locally

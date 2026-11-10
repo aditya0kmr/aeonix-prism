@@ -128,7 +128,7 @@ class PocoPttController:
         """
         with self._lock:
             # 1. Check for Sanctuary / Sentinel lockdown
-            if is_sanctuary_active():
+            if is_sanctuary_active() or self._state == PttState.LOCKDOWN:
                 self._state = PttState.LOCKDOWN
                 try:
                     log_audit_event(
@@ -318,6 +318,12 @@ class PocoPttController:
         with self._lock:
             self._state = PttState.LOCKDOWN
         return res
+
+    def release_lockdown(self):
+        """Releases lockdown state back to IDLE."""
+        with self._lock:
+            if self._state == PttState.LOCKDOWN:
+                self._state = PttState.IDLE
 
     def clear_buffer(self):
         """Manually zeroes and clears in-memory audio buffer."""

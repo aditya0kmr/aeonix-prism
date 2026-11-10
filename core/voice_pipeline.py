@@ -225,13 +225,28 @@ def process_voice_pipeline(
     # Consequential commands (e.g. approve, delete, wipe, export_keys) must NEVER execute automatically!
     if is_query_consequential(clean_transcript):
         elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        req_id = ""
+        try:
+            from aeonix.core.db import queue_sentinel_request
+            req_id = queue_sentinel_request(
+                agent="VoicePipeline",
+                action_class="CONSEQUENTIAL_VOICE_INTENT",
+                action_type=clean_transcript,
+                target="system_vault",
+                scope={"raw_transcript": clean_transcript},
+                risk_level="HIGH",
+                db_path=db_path
+            )
+        except Exception:
+            pass
+
         try:
             log_audit_event(
                 actor=actor,
                 action="voice_sentinel_hold",
                 target="sentinel_gate",
                 result="hold_for_approval",
-                details={"transcript": clean_transcript},
+                details={"transcript": clean_transcript, "request_id": req_id},
                 db_path=db_path
             )
         except Exception:
@@ -291,13 +306,28 @@ def process_voice_pipeline(
         # Sentinel Security Check: Is the action or transcript consequential?
         if is_query_consequential(clean_transcript) or is_query_consequential(action):
             elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+            req_id = ""
+            try:
+                from aeonix.core.db import queue_sentinel_request
+                req_id = queue_sentinel_request(
+                    agent="VoicePipeline",
+                    action_class="CONSEQUENTIAL_VOICE_INTENT",
+                    action_type=action,
+                    target="system_vault",
+                    scope={"action": action, "raw_transcript": clean_transcript},
+                    risk_level="HIGH",
+                    db_path=db_path
+                )
+            except Exception:
+                pass
+
             try:
                 log_audit_event(
                     actor=actor,
                     action="voice_sentinel_hold",
                     target="sentinel_gate",
                     result="hold_for_approval",
-                    details={"action": action, "transcript": clean_transcript},
+                    details={"action": action, "transcript": clean_transcript, "request_id": req_id},
                     db_path=db_path
                 )
             except Exception:

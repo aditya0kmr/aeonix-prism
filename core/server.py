@@ -1067,6 +1067,7 @@ async def post_sanctuary_deactivate(request):
             body = {}
         actor = body.get("actor", actor)
         res = release_sanctuary(actor=actor)
+        _ptt_controller.cancel(actor=actor, reason="sanctuary_released")
         await broadcast_message({
             "type": "sanctuary_mode",
             "active": False

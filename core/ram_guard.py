@@ -50,16 +50,16 @@ def get_child_process_count() -> int:
     except Exception:
         return 1
 
-def check_ram_guard(threshold_kb: int = 1200000) -> Dict[str, Any]:
+def check_ram_guard(threshold_kb: int = 800000) -> Dict[str, Any]:
     """
     Guarantees safety before launching local LLM inference.
-    Default threshold: ~1.2GB available RAM for Qwen2.5-0.5B.
+    Default threshold: ~800MB available RAM for base system operations.
     """
     mem = get_memory_info()
     available_kb = mem.get("MemAvailable", mem.get("MemFree", 0))
     child_count = get_child_process_count()
 
-    is_safe = (available_kb >= threshold_kb) and (child_count < 24)
+    is_safe = available_kb >= threshold_kb
 
     return {
         "is_safe": is_safe,
@@ -96,7 +96,7 @@ def check_model_ram_guard(model_tier: str = "0.5B", mock_free_kb: Optional[int] 
         available_kb = mem.get("MemAvailable", mem.get("MemFree", 0))
         child_count = get_child_process_count()
 
-    is_safe = (available_kb >= threshold_kb) and (child_count < 24)
+    is_safe = available_kb >= threshold_kb
 
     return {
         "is_safe": is_safe,

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-10T10:37:41Z",
-  "total_test_suites": 31,
-  "total_test_cases": 238,
+  "generated_at": "2026-11-10T12:33:35Z",
+  "total_test_suites": 32,
+  "total_test_cases": 264,
   "suites": [
     {
       "module": "test_agents",
@@ -826,6 +826,170 @@
         }
       ],
       "test_count": 4
+    },
+    {
+      "module": "test_p0_3_poco_mic_ptt",
+      "class": "TestP03PocoMicPttMasterIntegration",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_p0_3_poco_mic_ptt.py",
+      "tests": [
+        {
+          "test_name": "test_01_permission_denied_handling",
+          "docstring": "Microphone permission denied returns clean status, zero crash, and guidance.",
+          "full_docstring": "Microphone permission denied returns clean status, zero crash, and guidance.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_normal_ptt_start_and_stop",
+          "docstring": "PTT press and release captures 16kHz PCM into memory and frees temp handle.",
+          "full_docstring": "PTT press and release captures 16kHz PCM into memory and frees temp handle.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_safety_timeout_cutoff",
+          "docstring": "PTT capture automatically halts at safety timeout (15s ceiling).",
+          "full_docstring": "PTT capture automatically halts at safety timeout (15s ceiling).",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_background_focus_loss_stop",
+          "docstring": "User switching apps or losing focus immediately aborts active microphone recording.",
+          "full_docstring": "User switching apps or losing focus immediately aborts active microphone recording.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_sentinel_lockdown_emergency_stop",
+          "docstring": "Lockdown immediately halts active recording, clears buffers, and blocks new PTT.",
+          "full_docstring": "Lockdown immediately halts active recording, clears buffers, and blocks new PTT.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_firetv_disconnect_resilience",
+          "docstring": "Voice intent processing succeeds locally when Fire TV is disconnected.",
+          "full_docstring": "Voice intent processing succeeds locally when Fire TV is disconnected.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_07_ambient_silence_vad_discard",
+          "docstring": "Silent or ambient background audio is flagged by VAD and rejected in <20ms.",
+          "full_docstring": "Silent or ambient background audio is flagged by VAD and rejected in <20ms.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_08_fast_path_direct_dispatch_under_50ms",
+          "docstring": "Deterministic queries route directly through Fast-Path in <50ms without LLM.",
+          "full_docstring": "Deterministic queries route directly through Fast-Path in <50ms without LLM.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_09_llm_fallback_burst_dispatch",
+          "docstring": "Open-ended intent missing Fast-Path invokes local Qwen burst inference.",
+          "full_docstring": "Open-ended intent missing Fast-Path invokes local Qwen burst inference.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_10_dynamic_ram_guard_queuing",
+          "docstring": "When required RAM is unavailable and fallback is off, request queues safely.",
+          "full_docstring": "When required RAM is unavailable and fallback is off, request queues safely.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_11_model_load_and_burst_unload_lifecycle",
+          "docstring": "Local LLM runner stops prior servers, executes burst, and unloads immediately.",
+          "full_docstring": "Local LLM runner stops prior servers, executes burst, and unloads immediately.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_12_zero_audio_retention_on_disk",
+          "docstring": "Temporary audio files are deleted immediately on stop/cancel; zero disk retention.",
+          "full_docstring": "Temporary audio files are deleted immediately on stop/cancel; zero disk retention.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_13_sentinel_gating_consequential_voice_actions",
+          "docstring": "Consequential voice command ('delete vault') halts and demands POCO passphrase.",
+          "full_docstring": "Consequential voice command ('delete vault') halts and demands POCO passphrase.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_14_console_loads_only_through_authenticated_endpoint",
+          "docstring": "GET /ui/ptt loads console with Bearer header or query token, rejecting unauthenticated.",
+          "full_docstring": "GET /ui/ptt loads console with Bearer header or query token, rejecting unauthenticated.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_15_unauthenticated_access_to_ptt_endpoints_rejected",
+          "docstring": "All PTT operational endpoints strictly reject unauthenticated access with 401.",
+          "full_docstring": "All PTT operational endpoints strictly reject unauthenticated access with 401.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_16_rate_limiting_and_debounce_prevent_abuse",
+          "docstring": "Bursts of rapid PTT activations trigger 429 rate-limiting.",
+          "full_docstring": "Bursts of rapid PTT activations trigger 429 rate-limiting.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_17_sanctuary_lockdown_cancels_and_blocks_ptt",
+          "docstring": "Sanctuary activation via REST cancels ongoing capture and blocks subsequent starts.",
+          "full_docstring": "Sanctuary activation via REST cancels ongoing capture and blocks subsequent starts.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_18_compact_firetv_layout_intent_below_2kb",
+          "docstring": "Layout intent broadcast payload serialized JSON is strictly bounded < 2048 bytes.",
+          "full_docstring": "Layout intent broadcast payload serialized JSON is strictly bounded < 2048 bytes.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_19_no_raw_waveform_or_bulk_log_sent_to_firetv",
+          "docstring": "Fire TV broadcast payload never leaks raw audio bytes or stack traces.",
+          "full_docstring": "Fire TV broadcast payload never leaks raw audio bytes or stack traces.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_20_audit_chain_continuity_across_ptt_flow",
+          "docstring": "Cryptographic SHA-256 hash chain remains continuous after PTT actions.",
+          "full_docstring": "Cryptographic SHA-256 hash chain remains continuous after PTT actions.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_21_no_cloud_egress_during_ptt_flow",
+          "docstring": "Voice pipeline strictly enforces zero external cloud egress.",
+          "full_docstring": "Voice pipeline strictly enforces zero external cloud egress.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_22_no_raw_audio_written_to_persistent_storage",
+          "docstring": "Vault database and secrets directory contain zero raw audio waveforms.",
+          "full_docstring": "Vault database and secrets directory contain zero raw audio waveforms.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_23_in_memory_audio_buffer_zeroed_and_cleared",
+          "docstring": "After audio buffer retrieval and clear_buffer(), internal bytearray is cleared.",
+          "full_docstring": "After audio buffer retrieval and clear_buffer(), internal bytearray is cleared.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_24_explicit_fallback_labeled_and_audit_logged",
+          "docstring": "Fallback from 1.5B to 0.5B is explicitly labeled and logged in the audit trail.",
+          "full_docstring": "Fallback from 1.5B to 0.5B is explicitly labeled and logged in the audit trail.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_25_ram_insufficient_requests_queue_without_silent_downgrade",
+          "docstring": "When fallback is disabled, an oversized request queues rather than silently downgrading.",
+          "full_docstring": "When fallback is disabled, an oversized request queues rather than silently downgrading.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_26_consequential_intents_require_sentinel_approval",
+          "docstring": "Consequential actions require POCO authority passphrase and cannot be resolved by TV.",
+          "full_docstring": "Consequential actions require POCO authority passphrase and cannot be resolved by TV.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 26
     },
     {
       "module": "test_phase3",
