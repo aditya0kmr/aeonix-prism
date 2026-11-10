@@ -18,7 +18,22 @@ import time
 import subprocess
 import re
 
-FIRETV_SERIAL = os.getenv("AEONIX_FIRETV_ADB", "10.96.74.179:5555")
+def get_firetv_serial() -> str:
+    env = os.getenv("AEONIX_FIRETV_ADB", "").strip()
+    if env:
+        return env
+    try:
+        out = subprocess.check_output("adb devices", shell=True, text=True)
+        for line in out.splitlines()[1:]:
+            parts = line.strip().split()
+            if len(parts) >= 2 and parts[1] == "device":
+                return parts[0]
+    except Exception:
+        pass
+    return ""
+
+
+FIRETV_SERIAL = get_firetv_serial()
 FIRETV_PACKAGE = "com.aether.launcher"
 FIRETV_ACTIVITY = "com.gathin.tvhome.MainActivity"
 
