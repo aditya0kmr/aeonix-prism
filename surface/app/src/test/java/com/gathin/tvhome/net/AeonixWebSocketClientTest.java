@@ -1,6 +1,7 @@
 package com.gathin.tvhome.net;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -133,5 +134,99 @@ public class AeonixWebSocketClientTest {
 
         // Verification must pass cleanly without throwing CertificateException
         tm.checkServerTrusted(new X509Certificate[]{cert}, "RSA");
+    }
+
+    @Test
+    public void testSensitiveActionsAreRejected() {
+        // Sentinel approvals and sensitive commands must be identified as sensitive
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"sentinel_action\",\"request_id\":\"req-123\",\"approved\":true}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"sentinel_approval\",\"approved\":true}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"mission_claim\",\"mission_id\":\"m-456\"}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"mission_execute\",\"mission_id\":\"m-456\"}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"file_delete\",\"path\":\"/vault/db.sqlite3\"}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"wipe\"}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"destructive_action\"}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"osint_query\",\"target\":\"domain\"}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"terminal_cmd\",\"command\":\"rm -rf /\"}"));
+        assertTrue(AeonixWebSocketClient.isSensitiveAction("{\"request_id\":\"req-999\",\"approved\":false}"));
+    }
+
+    @Test
+    public void testNonSensitiveActionsAreAccepted() {
+        // UI navigation, focus, ping, and status events must be identified as non-sensitive
+        assertFalse(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"dpad_nav\",\"keycode\":19,\"timestamp\":1710000000}"));
+        assertFalse(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"dpad_nav\",\"keycode\":20,\"timestamp\":1710000001}"));
+        assertFalse(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"ui_state\",\"screen\":\"home\"}"));
+        assertFalse(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"focus_change\",\"position\":2}"));
+        assertFalse(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"ping\"}"));
+        assertFalse(AeonixWebSocketClient.isSensitiveAction("{\"type\":\"status_query\"}"));
+        assertFalse(AeonixWebSocketClient.isSensitiveAction(null));
+        assertFalse(AeonixWebSocketClient.isSensitiveAction(""));
+    }
+
+    @Test
+    public void testBoundedQueueCapacityAndDropPolicy() {
+        AeonixWebSocketClient client = new AeonixWebSocketClient(null, new AeonixWebSocketClient.Listener() {
+            @Override public void onConnected() {}
+            @Override public void onDisconnected(String reason) {}
+            @Override public void onMessage(String payload) {}
+            @Override public void onError(Throwable t) {}
+        });
+
+        assertEquals(0, client.getQueueSize());
+        assertEquals(0, client.getDroppedEventCount());
+
+        // Queue 60 non-sensitive events while offline
+        for (int i = 0; i < 60; i++) {
+            client.sendText("{\"type\":\"dpad_nav\",\"seq\":" + i + "}");
+        }
+
+        // Bounded ceiling: queue must not exceed MAX_QUEUE_CAPACITY (50)
+        assertEquals(50, client.getQueueSize());
+        // 10 events must have been dropped (overflow policy: drop oldest)
+        assertEquals(10, client.getDroppedEventCount());
+    }
+
+    @Test
+    public void testSensitiveActionNeverEntersOfflineQueue() {
+        AeonixWebSocketClient client = new AeonixWebSocketClient(null, new AeonixWebSocketClient.Listener() {
+            @Override public void onConnected() {}
+            @Override public void onDisconnected(String reason) {}
+            @Override public void onMessage(String payload) {}
+            @Override public void onError(Throwable t) {}
+        });
+
+        assertEquals(0, client.getQueueSize());
+
+        // Attempt to queue sensitive Sentinel approval while offline
+        client.sendText("{\"type\":\"sentinel_action\",\"request_id\":\"req-999\",\"approved\":true}");
+        client.sendText("{\"type\":\"mission_claim\",\"mission_id\":\"m-001\"}");
+        client.sendText("{\"type\":\"file_delete\",\"path\":\"/important\"}");
+
+        // None of these sensitive actions may enter the offline queue!
+        assertEquals(0, client.getQueueSize());
+        assertEquals(0, client.getDroppedEventCount());
+    }
+
+    @Test
+    public void testExponentialBackoffProgressionAndCeiling() {
+        int backoff = AeonixWebSocketClient.INITIAL_BACKOFF_MS;
+        assertEquals(1000, backoff);
+
+        backoff = (int) Math.min(backoff * AeonixWebSocketClient.BACKOFF_MULTIPLIER, AeonixWebSocketClient.MAX_BACKOFF_MS);
+        assertEquals(2000, backoff);
+
+        backoff = (int) Math.min(backoff * AeonixWebSocketClient.BACKOFF_MULTIPLIER, AeonixWebSocketClient.MAX_BACKOFF_MS);
+        assertEquals(4000, backoff);
+
+        backoff = (int) Math.min(backoff * AeonixWebSocketClient.BACKOFF_MULTIPLIER, AeonixWebSocketClient.MAX_BACKOFF_MS);
+        assertEquals(8000, backoff);
+
+        backoff = (int) Math.min(backoff * AeonixWebSocketClient.BACKOFF_MULTIPLIER, AeonixWebSocketClient.MAX_BACKOFF_MS);
+        assertEquals(16000, backoff);
+
+        // Ceiling test: next backoff remains clamped at MAX_BACKOFF_MS (16000)
+        backoff = (int) Math.min(backoff * AeonixWebSocketClient.BACKOFF_MULTIPLIER, AeonixWebSocketClient.MAX_BACKOFF_MS);
+        assertEquals(16000, backoff);
     }
 }

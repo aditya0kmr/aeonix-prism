@@ -1,9 +1,14 @@
 package com.gathin.tvhome.net;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Handler;
@@ -25,7 +30,9 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
@@ -36,7 +43,12 @@ import javax.net.ssl.X509TrustManager;
 /**
  * Ultra-Lightweight Sovereign WebSocket Client (<100KB RAM overhead)
  * Connects directly to POCO Core Mind (ws://10.116.23.168:8080/ws)
- * Features mDNS fallback discovery and automatic exponential backoff reconnection.
+ * Features:
+ * - Fire OS Wi-Fi power-save sleep/wake resilience
+ * - Exponential backoff reconnection with random jitter and max ceiling
+ * - Bounded local event queue (max 50 events, drop-oldest overflow policy)
+ * - Strict Zero-Trust offline security: Sensitive actions/approvals/missions are rejected from queue
+ * - mDNS fallback discovery and TLS certificate pinning
  */
 public class AeonixWebSocketClient {
     private static final String TAG = "AeonixWS";
@@ -44,7 +56,26 @@ public class AeonixWebSocketClient {
     private static final int DEFAULT_PORT = 8080;
     private static final String SERVICE_TYPE = "_aeonix._tcp.";
 
+    public static final int INITIAL_BACKOFF_MS = 1000;
+    public static final int MAX_BACKOFF_MS = 16000;
+    public static final double BACKOFF_MULTIPLIER = 2.0;
+    public static final int MAX_QUEUE_CAPACITY = 50;
+
+    private static void logD(String tag, String msg) {
+        try { Log.d(tag, msg); } catch (Throwable ignored) {}
+    }
+    private static void logI(String tag, String msg) {
+        try { Log.i(tag, msg); } catch (Throwable ignored) {}
+    }
+    private static void logW(String tag, String msg) {
+        try { Log.w(tag, msg); } catch (Throwable ignored) {}
+    }
+    private static void logE(String tag, String msg) {
+        try { Log.e(tag, msg); } catch (Throwable ignored) {}
+    }
+
     public String loadProvisionedToken() {
+        if (context == null) return "";
         try {
             File authFile = new File(context.getFilesDir(), "auth/glass_token.json");
             if (authFile.exists() && authFile.canRead()) {
@@ -58,12 +89,13 @@ public class AeonixWebSocketClient {
                 }
             }
         } catch (Exception e) {
-            Log.w(TAG, "Failed to load provisioned token: " + e.getMessage());
+            logW(TAG, "Failed to load provisioned token: " + e.getMessage());
         }
         return "";
     }
 
     public String loadPinnedFingerprint() {
+        if (context == null) return "";
         try {
             File pinFile = new File(context.getFilesDir(), "auth/cert_pin.json");
             if (pinFile.exists() && pinFile.canRead()) {
@@ -77,7 +109,7 @@ public class AeonixWebSocketClient {
                 }
             }
         } catch (Exception e) {
-            Log.w(TAG, "Failed to load pinned certificate fingerprint: " + e.getMessage());
+            logW(TAG, "Failed to load pinned certificate fingerprint: " + e.getMessage());
         }
         return "";
     }
@@ -129,18 +161,85 @@ public class AeonixWebSocketClient {
         return sslContext.getSocketFactory();
     }
 
+    /**
+     * Determines whether a payload is a sensitive action that must NEVER be queued,
+     * replayed, or executed while offline (Sentinel approvals, mission claims, destructive actions, OSINT).
+     */
+    public static boolean isSensitiveAction(String payload) {
+        if (payload == null || payload.trim().isEmpty()) return false;
+        try {
+            JSONObject obj = new JSONObject(payload);
+            String type = obj.optString("type", "").toLowerCase();
+            if (type.equals("sentinel_action") ||
+                type.equals("sentinel_approval") ||
+                type.equals("sentinel_response") ||
+                type.equals("sentinel_claim") ||
+                type.equals("sentinel_card") ||
+                type.equals("sentinel_request") ||
+                type.equals("sentinel_resolved") ||
+                type.equals("mission_claim") ||
+                type.equals("mission_execute") ||
+                type.equals("consequential_mission") ||
+                type.equals("file_delete") ||
+                type.equals("destructive_action") ||
+                type.equals("wipe") ||
+                type.equals("sanctuary_toggle") ||
+                type.equals("osint_query") ||
+                type.equals("terminal_cmd") ||
+                type.equals("shell_exec")) {
+                return true;
+            }
+            if (obj.has("request_id") && (obj.has("approved") || obj.has("approval"))) {
+                return true;
+            }
+            if (obj.has("mission_id") && (obj.has("execute") || obj.has("claim"))) {
+                return true;
+            }
+        } catch (Throwable ignored) {
+            String lower = payload.toLowerCase();
+            if (lower.contains("sentinel_action") ||
+                lower.contains("sentinel_approval") ||
+                lower.contains("mission_claim") ||
+                lower.contains("mission_execute") ||
+                lower.contains("file_delete") ||
+                lower.contains("destructive_action") ||
+                lower.contains("wipe") ||
+                lower.contains("osint_query") ||
+                lower.contains("terminal_cmd") ||
+                (lower.contains("request_id") && (lower.contains("approved") || lower.contains("approval"))) ||
+                (lower.contains("mission_id") && (lower.contains("execute") || lower.contains("claim")))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public interface Listener {
         void onConnected();
         void onDisconnected(String reason);
         void onMessage(String payload);
         void onError(Throwable t);
+        default void onSleep() {}
+        default void onWake() {}
     }
 
     private final Context context;
     private final Listener listener;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Handler mainHandler;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final AtomicBoolean isConnected = new AtomicBoolean(false);
+    private final AtomicBoolean isSleeping = new AtomicBoolean(false);
+
+    private final Object reconnectLock = new Object();
+    private volatile boolean forceReconnectRequested = false;
+
+    // Bounded local event queue (Requirement 5 & 6)
+    private final ConcurrentLinkedQueue<String> eventQueue = new ConcurrentLinkedQueue<>();
+    private final AtomicLong queuedCount = new AtomicLong(0);
+    private final AtomicLong droppedEventCount = new AtomicLong(0);
+    private final AtomicLong flushedEventCount = new AtomicLong(0);
+    private final AtomicLong reconnectCount = new AtomicLong(0);
+    private volatile String lastDisconnectReason = "INITIALIZING";
 
     private String targetHost = DEFAULT_HOST;
     private int targetPort = DEFAULT_PORT;
@@ -151,16 +250,29 @@ public class AeonixWebSocketClient {
     private Thread heartbeatThread;
     private NsdManager nsdManager;
     private NsdManager.DiscoveryListener discoveryListener;
+    private BroadcastReceiver powerAndNetworkReceiver;
 
     public AeonixWebSocketClient(Context context, Listener listener) {
-        this.context = context.getApplicationContext();
+        this.context = (context != null) ? context.getApplicationContext() : null;
         this.listener = listener;
-        initMdnsDiscovery();
+        Handler h = null;
+        try {
+            if (Looper.myLooper() != null || Looper.getMainLooper() != null) {
+                h = new Handler(Looper.getMainLooper() != null ? Looper.getMainLooper() : Looper.myLooper());
+            }
+        } catch (Exception ignored) {}
+        this.mainHandler = h;
+
+        if (this.context != null) {
+            initMdnsDiscovery();
+        }
     }
 
     private void initMdnsDiscovery() {
+        if (context == null) return;
         try {
             nsdManager = (NsdManager) context.getSystemService(Context.NSD_SERVICE);
+            if (nsdManager == null) return;
             discoveryListener = new NsdManager.DiscoveryListener() {
                 @Override
                 public void onStartDiscoveryFailed(String serviceType, int errorCode) {}
@@ -187,7 +299,7 @@ public class AeonixWebSocketClient {
                                     if (resolved.getHost() != null) {
                                         targetHost = resolved.getHost().getHostAddress();
                                         targetPort = resolved.getPort();
-                                        Log.i(TAG, "mDNS resolved Core Mind at: " + targetHost + ":" + targetPort);
+                                        logI(TAG, "mDNS resolved Core Mind at: " + targetHost + ":" + targetPort);
                                     }
                                 }
                             });
@@ -200,20 +312,77 @@ public class AeonixWebSocketClient {
             };
             nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
         } catch (Exception e) {
-            Log.w(TAG, "mDNS discovery not supported or failed: " + e.getMessage());
+            logW(TAG, "mDNS discovery not supported or failed: " + e.getMessage());
+        }
+    }
+
+    private void registerReceivers() {
+        if (context == null || powerAndNetworkReceiver != null) return;
+        try {
+            powerAndNetworkReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context ctx, Intent intent) {
+                    if (intent == null || intent.getAction() == null) return;
+                    String action = intent.getAction();
+                    if (Intent.ACTION_SCREEN_OFF.equals(action)) {
+                        logI(TAG, "Detected Fire OS ACTION_SCREEN_OFF (Wi-Fi power-save sleep initiated)");
+                        isSleeping.set(true);
+                        lastDisconnectReason = "POWER_SAVE_SLEEP";
+                        closeSocket();
+                        notifySleep();
+                        notifyDisconnected("POWER_SAVE_SLEEP");
+                    } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
+                        logI(TAG, "Detected Fire OS ACTION_SCREEN_ON (Device wake detected)");
+                        isSleeping.set(false);
+                        notifyWake();
+                        reconnectImmediately();
+                    } else if (ConnectivityManager.CONNECTIVITY_ACTION.equals(action)) {
+                        ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+                        NetworkInfo netInfo = (cm != null) ? cm.getActiveNetworkInfo() : null;
+                        boolean isOnline = (netInfo != null && netInfo.isConnected());
+                        logD(TAG, "Connectivity state change: online=" + isOnline);
+                        if (isOnline && !isConnected.get() && !isSleeping.get()) {
+                            reconnectImmediately();
+                        } else if (!isOnline && isConnected.get()) {
+                            lastDisconnectReason = "NETWORK_DISCONNECTED";
+                            closeSocket();
+                            notifyDisconnected("NETWORK_DISCONNECTED");
+                        }
+                    }
+                }
+            };
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(Intent.ACTION_SCREEN_OFF);
+            filter.addAction(Intent.ACTION_SCREEN_ON);
+            filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+            context.registerReceiver(powerAndNetworkReceiver, filter);
+        } catch (Exception e) {
+            logW(TAG, "Failed to register power/network receivers: " + e.getMessage());
+        }
+    }
+
+    private void unregisterReceivers() {
+        if (context != null && powerAndNetworkReceiver != null) {
+            try {
+                context.unregisterReceiver(powerAndNetworkReceiver);
+            } catch (Exception ignored) {}
+            powerAndNetworkReceiver = null;
         }
     }
 
     public synchronized void start() {
         if (isRunning.getAndSet(true)) return;
 
+        registerReceivers();
         workerThread = new Thread(this::runConnectionLoop, "AeonixWS-Worker");
         workerThread.start();
     }
 
     public synchronized void stop() {
         isRunning.set(false);
+        unregisterReceivers();
         closeSocket();
+        reconnectImmediately();
         if (workerThread != null) {
             workerThread.interrupt();
             workerThread = null;
@@ -228,6 +397,16 @@ public class AeonixWebSocketClient {
             } catch (Exception ignored) {}
         }
         stopVoiceRecording();
+    }
+
+    public void reconnectImmediately() {
+        forceReconnectRequested = true;
+        synchronized (reconnectLock) {
+            reconnectLock.notifyAll();
+        }
+        if (workerThread != null) {
+            workerThread.interrupt();
+        }
     }
 
     private AudioRecord audioRecord;
@@ -255,7 +434,7 @@ public class AeonixWebSocketClient {
                 );
 
                 if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
-                    Log.e(TAG, "AudioRecord failed to initialize");
+                    logE(TAG, "AudioRecord failed to initialize");
                     isRecording.set(false);
                     return;
                 }
@@ -267,7 +446,7 @@ public class AeonixWebSocketClient {
 
                 while (isRecording.get()) {
                     if (System.currentTimeMillis() - recordStartTime > maxRecordingDurationMs) {
-                        Log.w(TAG, "Audio recording hit 15s safety duration ceiling. Terminating stream.");
+                        logW(TAG, "Audio recording hit 15s safety duration ceiling. Terminating stream.");
                         break;
                     }
                     int read = audioRecord.read(audioBuf, 0, audioBuf.length);
@@ -279,7 +458,7 @@ public class AeonixWebSocketClient {
                     }
                 }
             } catch (Exception e) {
-                Log.e(TAG, "Audio recording error: " + e.getMessage());
+                logE(TAG, "Audio recording error: " + e.getMessage());
             } finally {
                 if (audioRecord != null) {
                     try {
@@ -304,22 +483,51 @@ public class AeonixWebSocketClient {
     }
 
     private void runConnectionLoop() {
-        int backoffMs = 1000;
+        int backoffMs = INITIAL_BACKOFF_MS;
         while (isRunning.get()) {
-            try {
-                Log.d(TAG, "Attempting connection to ws://" + targetHost + ":" + targetPort + "/ws");
-                connectAndListen();
-                backoffMs = 1000; // Reset backoff on clean run
-            } catch (Exception e) {
-                notifyDisconnected("Connection failed: " + e.getMessage());
-                Log.w(TAG, "Connection dropped, retrying in " + backoffMs + "ms: " + e.getMessage());
+            if (isSleeping.get()) {
+                logD(TAG, "Device is in Wi-Fi power-save sleep. Pausing reconnect loop until wake.");
+                synchronized (reconnectLock) {
+                    try {
+                        reconnectLock.wait(60000);
+                    } catch (InterruptedException ignored) {}
+                }
+                if (!isRunning.get()) break;
+                if (isSleeping.get()) continue;
             }
 
             try {
-                Thread.sleep(backoffMs);
-                backoffMs = Math.min(backoffMs * 2, 10000);
-            } catch (InterruptedException ie) {
-                break;
+                logD(TAG, "Attempting connection to ws://" + targetHost + ":" + targetPort + "/ws");
+                forceReconnectRequested = false;
+                connectAndListen();
+                backoffMs = INITIAL_BACKOFF_MS; // Reset backoff on clean connection
+            } catch (Exception e) {
+                String reason = isSleeping.get() ? "POWER_SAVE_SLEEP" : ("Connection failed: " + e.getMessage());
+                lastDisconnectReason = reason;
+                notifyDisconnected(reason);
+                logW(TAG, "Connection dropped (" + reason + "), retrying in " + backoffMs + "ms");
+            }
+
+            if (!isRunning.get()) break;
+
+            int jitter = (int) (Math.random() * 500);
+            int sleepTime = Math.min(backoffMs + jitter, MAX_BACKOFF_MS);
+            backoffMs = Math.min((int) (backoffMs * BACKOFF_MULTIPLIER), MAX_BACKOFF_MS);
+
+            synchronized (reconnectLock) {
+                if (forceReconnectRequested) {
+                    forceReconnectRequested = false;
+                    backoffMs = INITIAL_BACKOFF_MS;
+                    continue;
+                }
+                try {
+                    reconnectLock.wait(sleepTime);
+                } catch (InterruptedException ie) {
+                    if (forceReconnectRequested) {
+                        forceReconnectRequested = false;
+                        backoffMs = INITIAL_BACKOFF_MS;
+                    }
+                }
             }
         }
     }
@@ -330,7 +538,7 @@ public class AeonixWebSocketClient {
             throw new IllegalStateException("NO_PIN_PROVISIONED: Sovereign glass terminal strictly mandates a valid provisioned certificate pin. Plaintext fallback prohibited.");
         }
 
-        Log.i(TAG, "Initiating Sovereign TLS Handshake with certificate pinning");
+        logI(TAG, "Initiating Sovereign TLS Handshake with certificate pinning");
         SSLSocketFactory sslFactory = getPinnedSSLSocketFactory(pinnedFp.trim());
         SSLSocket sslSocket = (SSLSocket) sslFactory.createSocket();
         sslSocket.connect(new InetSocketAddress(targetHost, targetPort), 5000);
@@ -360,7 +568,7 @@ public class AeonixWebSocketClient {
                 "Sec-WebSocket-Key: " + secKey + "\r\n" +
                 "Sec-WebSocket-Version: 13\r\n\r\n";
 
-        outStream.write(handshake.getBytes());
+        outStream.write(handshake.getBytes(StandardCharsets.UTF_8));
         outStream.flush();
 
         // Read HTTP response headers
@@ -378,13 +586,15 @@ public class AeonixWebSocketClient {
             }
         }
 
-        String headers = headerBuf.toString();
+        String headers = headerBuf.toString("UTF-8");
         if (!headers.contains("101 Switching Protocols")) {
             throw new IllegalStateException("Handshake failed: " + headers);
         }
 
         isConnected.set(true);
+        reconnectCount.incrementAndGet();
         notifyConnected();
+        flushEventQueue();
         startHeartbeat();
 
         // Frame read loop
@@ -431,7 +641,7 @@ public class AeonixWebSocketClient {
             }
 
             if (opcode == 0x1) { // Text
-                String text = new String(payload, "UTF-8");
+                String text = new String(payload, StandardCharsets.UTF_8);
                 notifyMessage(text);
             } else if (opcode == 0x9) { // Ping
                 sendPong(payload);
@@ -449,7 +659,7 @@ public class AeonixWebSocketClient {
             while (isConnected.get() && isRunning.get()) {
                 try {
                     Thread.sleep(5000);
-                    sendText("{\"type\":\"ping\"}");
+                    sendImmediately("{\"type\":\"ping\"}");
                 } catch (InterruptedException ie) {
                     break;
                 } catch (Exception e) {
@@ -460,28 +670,86 @@ public class AeonixWebSocketClient {
         heartbeatThread.start();
     }
 
+    /**
+     * Sends a text message. If connected, sends immediately.
+     * If disconnected:
+     * - Drops sensitive actions (Sentinel approvals, mission execution, etc.) per Zero-Trust Policy.
+     * - Queues non-sensitive UI/state events into bounded queue (max 50, drop oldest on overflow).
+     */
     public synchronized void sendText(String message) {
+        if (message == null) return;
+
+        if (isConnected.get() && outStream != null) {
+            sendImmediately(message);
+            return;
+        }
+
+        // Offline event handling
+        if (isSensitiveAction(message)) {
+            logW(TAG, "DROPPED SENSITIVE ACTION: Sensitive command rejected while offline (Zero-Trust Policy): " + message);
+            return;
+        }
+
+        // Bounded queue: drop oldest when saturated
+        while (eventQueue.size() >= MAX_QUEUE_CAPACITY) {
+            String dropped = eventQueue.poll();
+            if (dropped != null) {
+                droppedEventCount.incrementAndGet();
+                logW(TAG, "Event queue saturated (" + MAX_QUEUE_CAPACITY + "). Dropped oldest non-sensitive event. Total dropped: " + droppedEventCount.get());
+            }
+        }
+        eventQueue.offer(message);
+        queuedCount.incrementAndGet();
+        logD(TAG, "Queued non-sensitive event while offline. Current queue size: " + eventQueue.size());
+    }
+
+    private void flushEventQueue() {
         if (!isConnected.get() || outStream == null) return;
+        int count = 0;
+        String event;
+        while ((event = eventQueue.poll()) != null) {
+            if (!isSensitiveAction(event)) {
+                sendImmediately(event);
+                count++;
+                flushedEventCount.incrementAndGet();
+            }
+        }
+        if (count > 0) {
+            logI(TAG, "Flushed " + count + " queued non-sensitive events upon reconnect.");
+        }
+    }
+
+    private void sendImmediately(String message) {
         new Thread(() -> {
             try {
-                byte[] raw = message.getBytes("UTF-8");
+                OutputStream os = outStream;
+                if (os == null || !isConnected.get()) {
+                    if (!isSensitiveAction(message)) {
+                        eventQueue.offer(message);
+                    }
+                    return;
+                }
+                byte[] raw = message.getBytes(StandardCharsets.UTF_8);
                 byte[] frame = encodeClientFrame(0x1, raw);
-                synchronized (outStream) {
-                    outStream.write(frame);
-                    outStream.flush();
+                synchronized (os) {
+                    os.write(frame);
+                    os.flush();
                 }
             } catch (Exception e) {
-                Log.w(TAG, "Error sending frame: " + e.getMessage());
+                logW(TAG, "Error sending frame: " + e.getMessage());
+                closeSocket();
             }
-        }).start();
+        }, "AeonixWS-Send").start();
     }
 
     private void sendPong(byte[] appData) {
         try {
+            OutputStream os = outStream;
+            if (os == null) return;
             byte[] frame = encodeClientFrame(0xA, appData);
-            synchronized (outStream) {
-                outStream.write(frame);
-                outStream.flush();
+            synchronized (os) {
+                os.write(frame);
+                os.flush();
             }
         } catch (Exception ignored) {}
     }
@@ -524,14 +792,71 @@ public class AeonixWebSocketClient {
     }
 
     private void notifyConnected() {
-        mainHandler.post(listener::onConnected);
+        if (mainHandler != null) {
+            mainHandler.post(listener::onConnected);
+        } else {
+            listener.onConnected();
+        }
     }
 
     private void notifyDisconnected(String reason) {
-        mainHandler.post(() -> listener.onDisconnected(reason));
+        if (mainHandler != null) {
+            mainHandler.post(() -> listener.onDisconnected(reason));
+        } else {
+            listener.onDisconnected(reason);
+        }
     }
 
     private void notifyMessage(String msg) {
-        mainHandler.post(() -> listener.onMessage(msg));
+        if (mainHandler != null) {
+            mainHandler.post(() -> listener.onMessage(msg));
+        } else {
+            listener.onMessage(msg);
+        }
+    }
+
+    private void notifySleep() {
+        if (mainHandler != null) {
+            mainHandler.post(listener::onSleep);
+        } else {
+            listener.onSleep();
+        }
+    }
+
+    private void notifyWake() {
+        if (mainHandler != null) {
+            mainHandler.post(listener::onWake);
+        } else {
+            listener.onWake();
+        }
+    }
+
+    // Telemetry and observation getters
+    public int getQueueSize() {
+        return eventQueue.size();
+    }
+
+    public long getDroppedEventCount() {
+        return droppedEventCount.get();
+    }
+
+    public long getFlushedEventCount() {
+        return flushedEventCount.get();
+    }
+
+    public long getReconnectCount() {
+        return reconnectCount.get();
+    }
+
+    public String getLastDisconnectReason() {
+        return lastDisconnectReason;
+    }
+
+    public boolean isSleeping() {
+        return isSleeping.get();
+    }
+
+    public boolean isConnected() {
+        return isConnected.get();
     }
 }
