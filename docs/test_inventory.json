@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-10T09:56:35Z",
-  "total_test_suites": 30,
-  "total_test_cases": 228,
+  "generated_at": "2026-11-10T10:37:41Z",
+  "total_test_suites": 31,
+  "total_test_cases": 238,
   "suites": [
     {
       "module": "test_agents",
@@ -1193,6 +1193,74 @@
           "docstring": "Silent buffers are rejected by VAD without invoking transcription cycles.",
           "full_docstring": "Silent buffers are rejected by VAD without invoking transcription cycles.",
           "is_negative_security_test": true
+        }
+      ],
+      "test_count": 10
+    },
+    {
+      "module": "test_ptt_console_and_endpoints",
+      "class": "TestPttConsoleAndEndpoints",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_ptt_console_and_endpoints.py",
+      "tests": [
+        {
+          "test_name": "test_01_console_loads_locally",
+          "docstring": "GET /ui/ptt loads local operator console HTML with zero external script/font links.",
+          "full_docstring": "GET /ui/ptt loads local operator console HTML with zero external script/font links.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_ptt_start_stop_lifecycle",
+          "docstring": "POST /api/ptt/start and POST /api/ptt/stop manage active recording lifecycle.",
+          "full_docstring": "POST /api/ptt/start and POST /api/ptt/stop manage active recording lifecycle.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_ptt_start_rate_limiting",
+          "docstring": "Rapid bursts of PTT start requests within 100ms trigger 429 rate limit.",
+          "full_docstring": "Rapid bursts of PTT start requests within 100ms trigger 429 rate limit.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_permission_denial_state",
+          "docstring": "When microphone permission is missing, endpoint returns clean guidance.",
+          "full_docstring": "When microphone permission is missing, endpoint returns clean guidance.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_sentinel_lockdown_and_emergency_toggle",
+          "docstring": "POST /api/sanctuary/activate activates lockdown, halts active PTT, and blocks start.",
+          "full_docstring": "POST /api/sanctuary/activate activates lockdown, halts active PTT, and blocks start.",
+          "is_negative_security_test": true
+        },
+        {
+          "test_name": "test_06_consequential_command_creates_approval_card",
+          "docstring": "Consequential voice command ('delete vault') creates pending Sentinel request.",
+          "full_docstring": "Consequential voice command ('delete vault') creates pending Sentinel request.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_07_sentinel_resolve_endpoint",
+          "docstring": "POST /api/sentinel/resolve permits POCO authority to approve or deny pending action.",
+          "full_docstring": "POST /api/sentinel/resolve permits POCO authority to approve or deny pending action.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_08_firetv_cannot_approve_consequential_action",
+          "docstring": "Fire TV token cannot resolve Sentinel requests (POCO sole authority).",
+          "full_docstring": "Fire TV token cannot resolve Sentinel requests (POCO sole authority).",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_09_status_endpoint_reports_model_and_queue",
+          "docstring": "GET /api/ptt/status returns complete telemetry on queue, model, and network.",
+          "full_docstring": "GET /api/ptt/status returns complete telemetry on queue, model, and network.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_10_audit_chain_continuity",
+          "docstring": "Cryptographic SHA-256 hash chain remains continuous after console operations.",
+          "full_docstring": "Cryptographic SHA-256 hash chain remains continuous after console operations.",
+          "is_negative_security_test": false
         }
       ],
       "test_count": 10
