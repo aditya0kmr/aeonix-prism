@@ -58,8 +58,9 @@ def get_apk_size() -> int:
             apk_path = path_out.split("package:")[1].strip()
             ls_out = adb_cmd(f"shell ls -l {apk_path}")
             parts = ls_out.split()
-            if len(parts) >= 4 and parts[3].isdigit():
-                return int(parts[3])
+            for p in parts:
+                if p.isdigit() and int(p) > 100000:
+                    return int(p)
     except Exception as e:
         print(f"[Warn] Could not read APK size: {e}")
     return 0
@@ -122,7 +123,9 @@ def run_resilience_test():
         report["failure_reason"] = "Core Mind offline"
         return report
 
-    # Ensure launcher is running and focused
+    # Ensure launcher is running, awake and focused
+    adb_cmd("shell input keyevent 224")  # KEYCODE_WAKEUP
+    time.sleep(1)
     adb_cmd(f"shell am start -n {FIRETV_PACKAGE}/{FIRETV_ACTIVITY}")
     time.sleep(2)
 

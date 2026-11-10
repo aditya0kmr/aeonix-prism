@@ -21,6 +21,7 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -42,17 +43,17 @@ import javax.net.ssl.X509TrustManager;
 
 /**
  * Ultra-Lightweight Sovereign WebSocket Client (<100KB RAM overhead)
- * Connects directly to POCO Core Mind (ws://10.116.23.168:8080/ws)
+ * Connects directly to POCO Core Mind over TLS (discovered dynamically via mDNS/Zeroconf)
  * Features:
  * - Fire OS Wi-Fi power-save sleep/wake resilience
  * - Exponential backoff reconnection with random jitter and max ceiling
  * - Bounded local event queue (max 50 events, drop-oldest overflow policy)
  * - Strict Zero-Trust offline security: Sensitive actions/approvals/missions are rejected from queue
- * - mDNS fallback discovery and TLS certificate pinning
+ * - mDNS/Zeroconf dynamic discovery and TLS certificate pinning
  */
 public class AeonixWebSocketClient {
     private static final String TAG = "AeonixWS";
-    private static final String DEFAULT_HOST = "10.116.23.168";
+    private static final String DEFAULT_HOST = ""; // Dynamically resolved via mDNS/Zeroconf or local uncommitted config
     private static final int DEFAULT_PORT = 8080;
     private static final String SERVICE_TYPE = "_aeonix._tcp.";
 
@@ -74,6 +75,40 @@ public class AeonixWebSocketClient {
         try { Log.e(tag, msg); } catch (Throwable ignored) {}
     }
 
+    public String loadProvisionedHost() {
+        if (context == null) return "";
+        try {
+            File endpointFile = new File(context.getFilesDir(), "auth/endpoint.json");
+            if (endpointFile.exists() && endpointFile.canRead()) {
+                byte[] data = new byte[(int) endpointFile.length()];
+                try (FileInputStream fis = new FileInputStream(endpointFile)) {
+                    int read = fis.read(data);
+                    if (read > 0) {
+                        JSONObject obj = new JSONObject(new String(data, 0, read, StandardCharsets.UTF_8));
+                        String h = obj.optString("host", "").trim();
+                        int p = obj.optInt("port", 0);
+                        if (p > 0) targetPort = p;
+                        if (!h.isEmpty()) return h;
+                    }
+                }
+            }
+            File authFile = new File(context.getFilesDir(), "auth/glass_token.json");
+            if (authFile.exists() && authFile.canRead()) {
+                byte[] data = new byte[(int) authFile.length()];
+                try (FileInputStream fis = new FileInputStream(authFile)) {
+                    int read = fis.read(data);
+                    if (read > 0) {
+                        JSONObject obj = new JSONObject(new String(data, 0, read, StandardCharsets.UTF_8));
+                        return obj.optString("host", "").trim();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logW(TAG, "Failed to load provisioned host: " + e.getMessage());
+        }
+        return "";
+    }
+
     public String loadProvisionedToken() {
         if (context == null) return "";
         try {
@@ -84,6 +119,10 @@ public class AeonixWebSocketClient {
                     int read = fis.read(data);
                     if (read > 0) {
                         JSONObject obj = new JSONObject(new String(data, 0, read, StandardCharsets.UTF_8));
+                        String host = obj.optString("host", "").trim();
+                        if (!host.isEmpty()) {
+                            targetHost = host;
+                        }
                         return obj.optString("token", "").trim();
                     }
                 }
@@ -533,6 +572,16 @@ public class AeonixWebSocketClient {
     }
 
     private void connectAndListen() throws Exception {
+        if (targetHost == null || targetHost.trim().isEmpty()) {
+            String prov = loadProvisionedHost();
+            if (!prov.isEmpty()) {
+                targetHost = prov;
+            }
+        }
+        if (targetHost == null || targetHost.trim().isEmpty()) {
+            throw new IOException("Core Mind endpoint not yet discovered via mDNS");
+        }
+
         String pinnedFp = loadPinnedFingerprint();
         if (pinnedFp == null || pinnedFp.trim().isEmpty()) {
             throw new IllegalStateException("NO_PIN_PROVISIONED: Sovereign glass terminal strictly mandates a valid provisioned certificate pin. Plaintext fallback prohibited.");
