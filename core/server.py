@@ -54,6 +54,13 @@ from aeonix.core.visia import analyze_visual_artifact
 from aeonix.core.backup import create_vault_backup, list_backups, verify_backup, generate_emergency_recovery_key
 from aeonix.core.morph import get_pending_proposals, generate_optimization_proposal
 from aeonix.core.council import convene_council_session
+from aeonix.core.ptt import PocoPttController
+from aeonix.ui.ptt_console import get_ptt_console_html
+from aeonix.core.voice_pipeline import process_voice_pipeline, get_queue_manager
+from aeonix.core.llama_runner import llama_runner
+
+_ptt_controller = PocoPttController(db_path=os.environ.get("AEONIX_DB_PATH"))
+_ptt_start_history: List[float] = []
 
 def get_request_identity(request) -> Tuple[str, str]:
     """
@@ -143,7 +150,7 @@ async def list_sentinel_pending(request):
     """, (time.time(),))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
-    return JSONResponse({"pending": rows})
+    return JSONResponse({"pending": rows, "requests": rows})
 
 async def resolve_sentinel(request):
     try:
@@ -554,6 +561,99 @@ async def get_voice_model_info_endpoint(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+async def get_ui_ptt(request):
+    """Serves the sovereign POCO tactile PTT operator console."""
+    token = issue_device_token("poco_console_operator", ROLE_POCO_CORE)
+    html_content = get_ptt_console_html(api_token=token)
+    return HTMLResponse(html_content)
+
+async def post_api_ptt_start(request):
+    """Starts explicit POCO push-to-talk recording with burst rate-limiting."""
+    global _ptt_start_history
+    now = time.time()
+    # Sliding window rate-limiting: max 5 starts per 5 seconds
+    _ptt_start_history = [t for t in _ptt_start_history if now - t < 5.0]
+    if len(_ptt_start_history) >= 5:
+        return JSONResponse({"error": "RATE_LIMIT_EXCEEDED: Maximum 5 PTT activations per 5 seconds"}, status_code=429)
+    if _ptt_start_history and (now - _ptt_start_history[-1]) < 0.1:
+        return JSONResponse({"error": "RATE_LIMIT_EXCEEDED: PTT activation burst debounced"}, status_code=429)
+
+    _ptt_start_history.append(now)
+
+    auth_role, caller = get_request_identity(request)
+    actor = caller if auth_role != "UNAUTHENTICATED" else "Aadi"
+    res = _ptt_controller.start_recording(actor=actor)
+    return JSONResponse(res)
+
+async def post_api_ptt_stop(request):
+    """Stops PTT recording, retrieves ephemeral audio, and runs voice intent pipeline."""
+    auth_role, caller = get_request_identity(request)
+    actor = caller if auth_role != "UNAUTHENTICATED" else "Aadi"
+
+    body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+    reason = body.get("reason", "release")
+    allow_fallback = bool(body.get("allow_fallback", False))
+    model_tier = body.get("model_tier", "0.5B")
+
+    stop_res = _ptt_controller.stop_recording(reason=reason, actor=actor)
+    audio_bytes = _ptt_controller.get_audio_buffer()
+    _ptt_controller.clear_buffer()
+
+    if not audio_bytes:
+        return JSONResponse({
+            **stop_res,
+            "pipeline": {
+                "status": "empty_audio",
+                "speech": "No audio captured."
+            }
+        })
+
+    pipeline_res = process_voice_pipeline(
+        audio_bytes=audio_bytes,
+        actor=actor,
+        model_tier=model_tier,
+        allow_fallback=allow_fallback,
+        db_path=os.environ.get("AEONIX_DB_PATH")
+    )
+
+    return JSONResponse({
+        **stop_res,
+        "pipeline": {
+            "success": pipeline_res.success,
+            "status": pipeline_res.status,
+            "speech": pipeline_res.speech,
+            "action": pipeline_res.action,
+            "tier": pipeline_res.tier,
+            "model_used": pipeline_res.model_used,
+            "fallback_applied": pipeline_res.fallback_applied,
+            "requires_sentinel_approval": pipeline_res.requires_sentinel_approval,
+            "latency_ms": pipeline_res.latency_ms
+        }
+    })
+
+async def get_api_ptt_status(request):
+    """Returns combined status of PTT, model runner, queue, and connected glass terminals."""
+    ptt_status = _ptt_controller.get_status()
+    q_mgr = get_queue_manager(db_path=os.environ.get("AEONIX_DB_PATH"))
+    queue_status = q_mgr.get_status()
+
+    model_info = {
+        "is_running": llama_runner.is_running(),
+        "active_model": "Qwen2.5-0.5B" if llama_runner.is_running() else "None (Burst Only)"
+    }
+
+    sanctuary_info = get_sanctuary_status()
+    firetv_connected = len(active_connections) > 0
+
+    return JSONResponse({
+        "ptt": ptt_status,
+        "queue": queue_status,
+        "model": model_info,
+        "sanctuary": sanctuary_info,
+        "firetv_connected": firetv_connected,
+        "active_tv_terminals": len(active_connections)
+    })
+
 async def post_reconcile_mission(request):
     """Resolves an interrupted mission in NEEDS_RECONCILIATION state."""
     try:
@@ -937,10 +1037,14 @@ async def post_sanctuary_activate(request):
         if auth_role != ROLE_POCO_CORE:
             return JSONResponse({"error": "POCO_AUTHORITY_REQUIRED: Only POCO Core Mind can modify Sanctuary state"}, status_code=403)
 
-        body = await request.json() if request.headers.get("content-length") else {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
         actor = body.get("actor", actor)
         reason = body.get("reason", "Operator Command")
         res = engage_sanctuary(actor=actor, reason=reason)
+        _ptt_controller.on_sentinel_lockdown(actor=actor)
         await broadcast_message({
             "type": "sanctuary_mode",
             "active": True
@@ -957,9 +1061,13 @@ async def post_sanctuary_deactivate(request):
         if auth_role != ROLE_POCO_CORE:
             return JSONResponse({"error": "POCO_AUTHORITY_REQUIRED: Only POCO Core Mind can modify Sanctuary state"}, status_code=403)
 
-        body = await request.json() if request.headers.get("content-length") else {}
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
         actor = body.get("actor", actor)
         res = release_sanctuary(actor=actor)
+        _ptt_controller.cancel(actor=actor, reason="sanctuary_released")
         await broadcast_message({
             "type": "sanctuary_mode",
             "active": False
@@ -1626,6 +1734,8 @@ class CentralAuthMiddleware(BaseHTTPMiddleware):
         token = ""
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
+        elif clean_path.startswith("/ui/") and "token" in request.query_params:
+            token = request.query_params.get("token", "").strip()
 
         if not token:
             return JSONResponse(
@@ -1784,6 +1894,10 @@ app = Starlette(
         Route("/api/missions/claim", post_claim_mission, methods=["POST"]),
         Route("/api/missions/reconcile", post_reconcile_mission, methods=["POST"]),
         Route("/api/voice/model", get_voice_model_info_endpoint, methods=["GET"]),
+        Route("/ui/ptt", get_ui_ptt, methods=["GET"]),
+        Route("/api/ptt/start", post_api_ptt_start, methods=["POST"]),
+        Route("/api/ptt/stop", post_api_ptt_stop, methods=["POST"]),
+        Route("/api/ptt/status", get_api_ptt_status, methods=["GET"]),
         WebSocketRoute("/ws", websocket_endpoint),
     ],
     middleware=middleware,

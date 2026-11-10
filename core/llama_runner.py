@@ -5,7 +5,7 @@ import hashlib
 import subprocess
 import httpx
 from typing import Optional, Dict, Any, List
-from aeonix.core.ram_guard import check_ram_guard
+from aeonix.core.ram_guard import check_ram_guard, check_model_ram_guard, MODEL_RAM_THRESHOLDS_KB
 
 MODEL_FAST = os.path.expanduser("~/aeonix/models/qwen2.5-0.5b-instruct-q4_k_m.gguf")
 MODEL_DEEP = os.path.expanduser("~/aeonix/models/qwen2.5-1.5b-instruct-q4_k_m.gguf")
@@ -69,13 +69,16 @@ class LlamaRunner:
             "sha256": sha256_hash
         }
 
-    def start_server(self, model_mode: str = "fast") -> bool:
+    def start_server(self, model_mode: str = "fast", allow_fallback: bool = False) -> bool:
         """
         Starts llama-server for either 'fast' (0.5B) or 'deep' (1.5B) model.
-        Preserves process logs and validates RAM guard thresholds.
+        Preserves process logs and validates model-specific RAM guard thresholds:
+        - 0.5B ('fast'): >= 1.2 GB free RAM
+        - 1.5B ('deep'): >= 2.5 GB free RAM
+        Does NOT silently downgrade unless allow_fallback=True.
         """
         target_model = MODEL_DEEP if model_mode == "deep" else MODEL_FAST
-        required_ram_kb = 1200000 if model_mode == "deep" else 600000
+        tier_name = "1.5B" if model_mode == "deep" else "0.5B"
 
         # If already running with the requested model, reuse it
         if self.is_running() and self.current_model == target_model:
@@ -86,13 +89,18 @@ class LlamaRunner:
             self.stop_server()
 
         # Pre-inference RAM guard
-        ram = check_ram_guard(threshold_kb=required_ram_kb)
+        ram = check_model_ram_guard(tier_name)
         if not ram["is_safe"]:
-            if model_mode == "deep":
-                print(f"[LlamaRunner] Insufficient RAM for 1.5B ({ram['available_mb']}MB). Falling back to 0.5B.")
-                return self.start_server(model_mode="fast")
+            if model_mode == "deep" and allow_fallback:
+                fallback_ram = check_model_ram_guard("0.5B")
+                if fallback_ram["is_safe"]:
+                    print(f"[LlamaRunner] Insufficient RAM for 1.5B ({ram['available_mb']}MB). Explicit fallback to 0.5B enabled.")
+                    return self.start_server(model_mode="fast", allow_fallback=False)
+                else:
+                    print(f"[LlamaRunner] Aborting start: RAM guard triggered even for 0.5B fallback ({fallback_ram['available_mb']}MB available)")
+                    return False
             else:
-                print(f"[LlamaRunner] Aborting start: RAM guard triggered ({ram['available_mb']}MB available)")
+                print(f"[LlamaRunner] Aborting start: RAM guard triggered for {tier_name} ({ram['available_mb']}MB available < {ram['threshold_mb']}MB required)")
                 return False
 
         cmd = [
