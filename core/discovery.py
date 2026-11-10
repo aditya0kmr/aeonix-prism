@@ -34,10 +34,10 @@ class AeonixDiscoveryService:
                 server="aeonix-core.local."
             )
             self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
-            self.zeroconf.register_service(self.info)
+            self.zeroconf.register_service(self.info, allow_name_change=True)
             return True
         except Exception as e:
-            print(f"[Discovery] Failed to register mDNS: {e}")
+            print(f"[Discovery] Failed to register mDNS ({type(e).__name__}): {e}")
             return False
 
     def stop(self):
