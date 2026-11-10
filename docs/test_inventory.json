@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T14:26:25Z",
-  "total_test_suites": 27,
-  "total_test_cases": 199,
+  "generated_at": "2026-11-10T09:10:49Z",
+  "total_test_suites": 28,
+  "total_test_cases": 208,
   "suites": [
     {
       "module": "test_agents",
@@ -1128,6 +1128,68 @@
         }
       ],
       "test_count": 10
+    },
+    {
+      "module": "test_ram_guard_and_queue",
+      "class": "TestRamGuardAndQueue",
+      "file_path": "/data/data/com.termux/files/home/aeonix-prism/tests/test_ram_guard_and_queue.py",
+      "tests": [
+        {
+          "test_name": "test_01_ram_thresholds_mapping",
+          "docstring": "Verifies exact thresholds: 0.5B = 1.2GB, 1.5B = 2.5GB, 3B = 4.0GB.",
+          "full_docstring": "Verifies exact thresholds: 0.5B = 1.2GB, 1.5B = 2.5GB, 3B = 4.0GB.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_02_ram_guard_checks_per_tier",
+          "docstring": "Verifies threshold evaluation with mocked available RAM values.",
+          "full_docstring": "Verifies threshold evaluation with mocked available RAM values.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_03_no_silent_downgrade_when_fallback_disabled",
+          "docstring": "1.5B request under 1.5GB RAM must NOT silently downgrade to 0.5B when fallback=False.",
+          "full_docstring": "1.5B request under 1.5GB RAM must NOT silently downgrade to 0.5B when fallback=False.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_04_explicit_fallback_labeling_and_audit",
+          "docstring": "1.5B request under 1.5GB RAM downgrades to 0.5B ONLY when allow_fallback=True, labeling output.",
+          "full_docstring": "1.5B request under 1.5GB RAM downgrades to 0.5B ONLY when allow_fallback=True, labeling output.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_05_queue_capacity_and_oldest_drop",
+          "docstring": "Enforces max 10 queued items, dropping the oldest when an 11th arrives, logging the drop.",
+          "full_docstring": "Enforces max 10 queued items, dropping the oldest when an 11th arrives, logging the drop.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_06_queue_ttl_expiration",
+          "docstring": "Items older than 10 minutes (600 seconds) must expire and not execute.",
+          "full_docstring": "Items older than 10 minutes (600 seconds) must expire and not execute.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_07_no_queueing_of_consequential_actions",
+          "docstring": "Consequential actions must NEVER be queued for automatic later execution.",
+          "full_docstring": "Consequential actions must NEVER be queued for automatic later execution.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_08_model_load_and_unload_lifecycle",
+          "docstring": "Verifies that only one model is loaded, inference runs, and model unloads immediately.",
+          "full_docstring": "Verifies that only one model is loaded, inference runs, and model unloads immediately.",
+          "is_negative_security_test": false
+        },
+        {
+          "test_name": "test_09_sentinel_lockdown_pauses_queue",
+          "docstring": "Under Sentinel / Sanctuary lockdown, queue processing must be paused or cancelled.",
+          "full_docstring": "Under Sentinel / Sanctuary lockdown, queue processing must be paused or cancelled.",
+          "is_negative_security_test": false
+        }
+      ],
+      "test_count": 9
     },
     {
       "module": "test_restore_coordination_and_writer_lock",
