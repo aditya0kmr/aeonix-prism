@@ -1,0 +1,97 @@
+{
+  "artifact_type": "voice_profile_evaluation_evidence",
+  "milestone": "P1-2",
+  "profile_identity": "prism_primary",
+  "evaluation_date": "2026-11-11",
+  "status": "APPROVED_PRIMARY_EVALUATION",
+  "production_release_ready": false,
+  "distribution_ready": false,
+  "evaluation_scope": "local_private_research",
+  "model": {
+    "name": "en_IN-spicor-medium",
+    "architecture": "VITS (Piper medium, single-speaker)",
+    "upstream_repository": "navgurukul-ai-labs/text-to-speech-en-IN-piper",
+    "upstream_revision": "a4ff93ef95684b5dafc3800b99fb78a6b4c30235",
+    "original_onnx_sha256": "e19debae94b70ecc9d22603820373c4dc9bfceb4de8675e1138d2072fca11494",
+    "original_onnx_size_bytes": 63516050,
+    "adapted_sherpa_onnx_sha256": "84732bfb9668b20f31c28e7fecf33c93498dbcbaac5c50069d8754a04b5ed4a7",
+    "adapted_sherpa_onnx_size_bytes": 63516183,
+    "tokens_txt_sha256": "e8a50ae0c75612d18cfcf3f90800dca79f961e3ed97f9574f3535194469187fd",
+    "tokens_count": 161
+  },
+  "approved_parameters": {
+    "speed": 0.90,
+    "silence_scale": 0.20,
+    "noise_scale": 0.667,
+    "noise_scale_w": 0.800,
+    "length_scale": 1.000,
+    "threads": 2
+  },
+  "phonemizer_contract": {
+    "engine": "espeak-ng",
+    "voice": "en-us",
+    "command_template": ["espeak-ng", "-q", "-v", "en-us", "--ipa", "{text}"],
+    "supported_symbols_count": 161
+  },
+  "audio_contract": {
+    "sample_rate_hz": 22050,
+    "channels": 1,
+    "sample_width_bytes": 2,
+    "encoding": "pcm_s16le"
+  },
+  "fallback_profile": "prism_fallback_ljspeech",
+  "governance_and_licensing": {
+    "model_license": "AGPL-3.0 (NavGurukul wrapper)",
+    "training_corpus": "IISc SPICOR English TTS Corpus",
+    "corpus_attribution": "SPIRE Lab, Department of Electrical Engineering, Indian Institute of Science (IISc Bangalore)",
+    "restrictions": [
+      "AGPL-3.0 requires complete source code disclosure if deployed across a network service.",
+      "SPIRE Datasets Terms of Use require project/research request clearance and restrict commercial redistribution."
+    ],
+    "commercial_readiness": "BLOCKED: Requires legal licensing review or transition to permissively-licensed multi-speaker checkpoint before public distribution."
+  },
+  "quality_methodology_statement": "WAV format validity and non-zero amplitude prove only successful AudioTrack synthesis and serialization; perceptual speech naturalness, cadence, and intelligibility are proven solely by human listener evaluation.",
+  "fire_tv_transport_status": "PASS — authenticated, certificate-pinned WebSocket delivery; AudioTrack initialized; playback completed; human reported audible speech.",
+  "pronunciation_conclusion": "Aadi pronunciation accepted by human listener.",
+  "test_evidence": [
+    {
+      "test_id": "Test A",
+      "text": "Hello, Aadi.",
+      "phoneme_output": ["həlˈoʊ", "ˈɑːdi"],
+      "unsupported_symbols": [],
+      "wav_sha256": "e8bb31825ab2d2e5ff62bc3193adfa91b2092b2886f2b05e7fcc74bb1108df81",
+      "pcm_bytes": 57344,
+      "duration_sec": 1.300,
+      "synthesis_time_sec": 0.264,
+      "rtf": 0.203,
+      "peak_rss_mb": 145.2,
+      "human_listening_verdict": "PASS — “It was good.”"
+    },
+    {
+      "test_id": "Test B",
+      "text": "The phone and television are connected.",
+      "phoneme_output": ["ðə fˈoʊn ænd tˈɛlᵻvˌɪʒən ɑːɹ kənˈɛktᵻd"],
+      "unsupported_symbols": [],
+      "wav_sha256": "c0a19c91d1997bbb20779b5419b557c696172336fbaec90b46f5d3f2a64af3df",
+      "pcm_bytes": 123904,
+      "duration_sec": 2.810,
+      "synthesis_time_sec": 0.591,
+      "rtf": 0.210,
+      "peak_rss_mb": 855.1,
+      "human_listening_verdict": "PASS — “The second audio was good.”"
+    },
+    {
+      "test_id": "Test C",
+      "text": "Please pause, then continue.",
+      "phoneme_output": ["plˈiːz pˈɔːz", "ðˈɛn kəntˈɪnjuː"],
+      "unsupported_symbols": [],
+      "wav_sha256": "c9709db81fc3479733c257225c692b8274ed8042e4b26d82c0c367a75ff03d41",
+      "pcm_bytes": 96256,
+      "duration_sec": 2.183,
+      "synthesis_time_sec": 0.463,
+      "rtf": 0.212,
+      "peak_rss_mb": 855.1,
+      "human_listening_verdict": "PASS — “It was good.”"
+    }
+  ]
+}

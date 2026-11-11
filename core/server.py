@@ -721,6 +721,7 @@ async def websocket_endpoint(websocket: WebSocket):
     
     # Audio buffer for PTT voice streaming
     audio_buffer = bytearray()
+    voice_test_executed = False
 
     # Send initial Living Surface Layout Intent
     await websocket.send_text(json.dumps({
@@ -823,6 +824,28 @@ async def websocket_endpoint(websocket: WebSocket):
                             "correlation_id": pipeline_res.get("correlation_id", "")
                         }))
                     audio_buffer = bytearray()
+                elif msg_type == "trigger_voice_test":
+                    if voice_test_executed:
+                        await websocket.send_text(json.dumps({
+                            "type": "voice_audio_error",
+                            "message_id": msg.get("message_id", "err"),
+                            "error": "SINGLE_USE_EXCEEDED: Test trigger limited strictly to 1 execution per connection."
+                        }))
+                    else:
+                        voice_test_executed = True
+                        from aeonix.core.voice_protocol import stream_voice_audio
+                        wav_source = msg.get("wav_source") or os.environ.get("PRISM_VOICE_TEST_WAV")
+                        if not wav_source:
+                            import io, wave
+                            buf = io.BytesIO()
+                            with wave.open(buf, "wb") as w:
+                                w.setnchannels(1)
+                                w.setsampwidth(2)
+                                w.setframerate(22050)
+                                w.writeframes(b"\x00" * 1000)
+                            wav_source = buf.getvalue()
+                        msg_id = msg.get("message_id")
+                        await stream_voice_audio(websocket, wav_source, message_id=msg_id)
             except json.JSONDecodeError:
                 pass
             except Exception as loop_err:
