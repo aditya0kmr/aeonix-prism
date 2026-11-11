@@ -108,6 +108,7 @@ If an operator forgets their passphrase or requires credential rotation:
 | `ROLE_POCO_CORE` | All 65 REST routes & WebSocket | None (Sovereign Authority) |
 | `ROLE_FIRETV_GLASS` | `GET /api/status`<br>`GET /api/sentinel/pending`<br>`POST /api/sentinel/resolve` (Deny only)<br>`POST /api/intent`<br>`POST /api/voice/transcribe`<br>`GET /api/lumen/surface`<br>`GET /api/briefing`<br>`GET /api/media/*`<br>`GET /api/sanctuary/status` | `POST /api/forge/*`<br>`GET /api/backup/*`<br>`POST /api/backup/*`<br>`GET /api/veritas/*`<br>`GET /api/guardian/*`<br>`POST /api/sanctuary/activate`<br>`POST /api/sanctuary/deactivate`<br>`POST /api/trust/*`<br>`POST /api/ai/benchmark` (All return 403 FORBIDDEN) |
 | `ROLE_AGENT_EXECUTOR` | `GET /api/status`<br>`POST /api/sentinel/create`<br>`POST /api/agents/dispatch`<br>`POST /api/memory/remember`<br>`GET /api/memory/recall` | System status, forge execution, backup operations, sanctuary (All return 403 FORBIDDEN) |
+| `ROLE_PTT_OPERATOR` | `GET /ui/ptt`<br>`POST /api/ptt/start`<br>`POST /api/ptt/stop`<br>`GET /api/ptt/status`<br>`POST /api/ptt/logout` | All administrative routes, backup operations, missions, events, trust engine, token management, system status (All return 403 FORBIDDEN) |
 
 ---
 
@@ -138,3 +139,23 @@ If an operator forgets their passphrase or requires credential rotation:
 - **Database Layer:** `get_connection()` raises `sqlite3.OperationalError: DATABASE_LOCKED: System is in disaster recovery maintenance mode` for non-recovery callers.
 - **REST Layer:** `CentralAuthMiddleware` returns `503 MAINTENANCE_LOCKED` for all non-backup endpoints.
 - **Recovery Isolation:** Only disaster recovery functions passing `allow_maintenance=True` can access and verify the database until restore completes and maintenance mode is safely released.
+
+---
+
+## 5. Browser PTT Console Security & TLS Trust Boundaries
+
+### 5.1 Public Static Shell & Sovereign Bootstrap Flow
+- **Public Credential-Free Shell:** `GET /ui/ptt` serves a static, credential-free HTML/JS shell. It leaks zero telemetry, contains no embedded bearer tokens or JWTs, does not access the microphone, and performs zero background polling until authentication succeeds.
+- **Protected Endpoints Deny-by-Default:** All operational PTT endpoints (`/api/ptt/start`, `/api/ptt/stop`, `/api/ptt/status`, `/api/ptt/logout`) strictly require an authenticated Bearer token and return HTTP 401 when unauthenticated.
+- **Elimination of Query Tokens:** Token acceptance via URL query parameters (`?token=...`) was completely eliminated across all endpoints (RFC 6750 enforcement).
+- **Single-Use 128-Bit Bootstrap Secret:** Operators generate a short-lived (5 min), single-use 128-bit secret locally via `python3 scripts/bootstrap_ptt_operator.py`. Only its SHA-256 hash is recorded in the sovereign vault. Exchanging it via `POST /api/ptt/bootstrap` issues a 15-minute `ROLE_PTT_OPERATOR` session token.
+- **Volatile JavaScript Retention:** Session tokens are retained strictly in transient JavaScript memory. Storage in `localStorage`, `sessionStorage`, or cookies is prohibited.
+- **Explicit Logout:** The `EXIT` button calls `POST /api/ptt/logout`, revoking the session token nonce immediately in the database.
+
+### 5.2 Browser TLS Limitations vs. Sovereign Hardware Pinning
+> [!WARNING]
+> **Asymmetric TLS Trust Boundary:**
+> - **Fire TV Sovereign Client:** Maintains strict cryptographic certificate pinning in code (`AeonixWebSocketClient.java`) by directly validating the SHA-256 digest of the server certificate against `cert_fingerprint.json`. It rejects any mismatch or untrusted CA.
+> - **POCO Mobile Browser:** Standard mobile browsers (Chrome / WebKit) do NOT support custom certificate pinning without operating system root CA installation. When navigating to `https://<lan-ip>:8443/ui/ptt`, the browser displays a self-signed certificate warning that requires manual operator bypass.
+> - **Risk Statement:** Browser PTT console access is an operator testing and demonstration interface, NOT sovereign pinned TLS. It remains vulnerable to active Local Area Network machine-in-the-middle (MITM) interception if the local network is hostile.
+> - **Security Policy:** Certificate validation must NEVER be disabled or downgraded to cleartext HTTP. Production client deployment must utilize native Android client code with certificate pinning.

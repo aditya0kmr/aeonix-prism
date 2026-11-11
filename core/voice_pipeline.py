@@ -7,9 +7,12 @@ Strictly offline, zero cloud egress, zero background recording, and fail-closed 
 
 import os
 import re
+import secrets
+import threading
 import time
+import asyncio
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 
 from aeonix.core.stt import detect_voice_activity, transcribe_pcm
 from aeonix.core.fast_path import match_fast_path, execute_fast_path
@@ -96,7 +99,8 @@ def process_voice_pipeline(
     actor: str = "Aadi",
     model_tier: str = "0.5B",
     allow_fallback: bool = False,
-    db_path: Optional[str] = None
+    db_path: Optional[str] = None,
+    caller_role: str = "POCO_CORE"
 ) -> VoicePipelineResult:
     """
     Executes the deterministic voice intent pipeline:
@@ -195,6 +199,67 @@ def process_voice_pipeline(
         )
     except Exception:
         pass
+
+    # Stage 4.5: Downstream Authorization Enforcement for Least-Privilege Roles
+    if caller_role == "PTT_OPERATOR":
+        lower_t = clean_transcript.lower()
+        admin_consequential_terms = {
+            "delete", "wipe", "format", "kill", "reboot", "shutdown", "backup",
+            "restore", "approve", "deny", "export", "key", "token", "dispatch",
+            "agent", "mission", "secret", "password", "drop", "alter", "update"
+        }
+        has_admin_terms = any(term in lower_t for term in admin_consequential_terms)
+
+        if check_prompt_injection(clean_transcript) or is_query_consequential(clean_transcript) or has_admin_terms:
+            elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+            return VoicePipelineResult(
+                success=False,
+                status="ptt_operator_restricted",
+                speech="PTT Operator is restricted to read-only system health queries. Consequential commands rejected.",
+                action="restricted_command_blocked",
+                tier="Tier 0 (Role Confinement)",
+                transcript=clean_transcript,
+                requires_sentinel_approval=False,
+                latency_ms=elapsed_ms
+            )
+
+        matched = match_fast_path(clean_transcript)
+        if not matched or matched[0] != "system_health":
+            elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+            return VoicePipelineResult(
+                success=False,
+                status="ptt_operator_restricted",
+                speech="Command not recognized for PTT Operator role. Only system status is permitted.",
+                action="restricted_command_blocked",
+                tier="Tier 0 (Role Confinement)",
+                transcript=clean_transcript,
+                requires_sentinel_approval=False,
+                latency_ms=elapsed_ms
+            )
+
+        exec_res = execute_fast_path("system_health", actor=actor)
+        elapsed_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        speech_text = "Living surface online. The phone and television are connected."
+        try:
+            broadcast_to_tv({
+                "type": "layout_update",
+                "speech": speech_text,
+                "layout_intent": exec_res.get("layout", {}),
+                "action": "system_health"
+            })
+        except Exception:
+            pass
+
+        return VoicePipelineResult(
+            success=True,
+            status="fast_path_system_health",
+            speech=speech_text,
+            action="system_health",
+            tier="Tier 0 (Fast Path)",
+            transcript=clean_transcript,
+            layout_intent=exec_res.get("layout"),
+            latency_ms=elapsed_ms
+        )
 
     # Stage 5: Prompt Injection & Adversarial Defense
     if check_prompt_injection(clean_transcript):
@@ -617,3 +682,320 @@ def process_voice_pipeline(
         layout_intent=compact_layout,
         latency_ms=elapsed_ms
     )
+
+
+class VoiceResponseSession:
+    """Represents an active voice response ownership session."""
+    def __init__(self, manager: "VoiceResponseOwnership", session_id: str):
+        self._manager = manager
+        self.session_id = session_id
+        self._orchestration_active = True
+        self._cancelled = False
+
+    def mark_cancelled(self):
+        self._cancelled = True
+
+    def finish_orchestration(self):
+        """Called by HTTP handler when async orchestration completes, fails, or times out."""
+        self._orchestration_active = False
+        self._manager._on_orchestration_finished(self)
+
+    async def run_in_executor(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        executor: Any,
+        func: Callable,
+        *args: Any
+    ) -> Any:
+        """
+        Submits synchronous work to executor while maintaining ownership.
+        Acquires/registers work BEFORE submission.
+        Guarantees cleanup on submission failure, worker exception, or cancellation.
+        """
+        task = asyncio.current_task(loop)
+        if (task and task.cancelled()) or self._cancelled or not self._orchestration_active:
+            raise asyncio.CancelledError("Voice response session cancelled before worker submission")
+
+        # 1. Register worker BEFORE submitting to executor
+        self._manager._on_worker_submitted(self)
+
+        def _worker_wrapper():
+            try:
+                return func(*args)
+            finally:
+                self._manager._on_worker_finished(self)
+
+        try:
+            concurrent_future = executor.submit(_worker_wrapper)
+        except Exception:
+            # Handle submission failure: worker will not run, decrement immediately
+            self._manager._on_worker_finished(self)
+            raise
+
+        asyncio_future = asyncio.wrap_future(concurrent_future, loop=loop)
+        return await asyncio_future
+
+
+class VoiceResponseOwnership:
+    """
+    Encapsulated race-safe ownership manager for the PTT voice response pipeline.
+    Enforces strict one-response-at-a-time execution across:
+      - Active async orchestration (event loop)
+      - Queued or executing synchronous worker threads (heavy_executor)
+      - Orphaned background workers surviving HTTP cancellation/timeout
+    """
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._active_session: Optional[VoiceResponseSession] = None
+        self._pending_workers: int = 0
+        self._orchestration_active: bool = False
+
+    def locked(self) -> bool:
+        """Returns True if ownership is held by active orchestration or pending worker."""
+        with self._lock:
+            return (self._active_session is not None) or self._orchestration_active or (self._pending_workers > 0)
+
+    def is_locked(self) -> bool:
+        return self.locked()
+
+    def try_acquire(self) -> Optional[VoiceResponseSession]:
+        """
+        Atomically checks and acquires ownership.
+        Returns VoiceResponseSession on success, or None if busy.
+        """
+        if self.locked():
+            return None
+        with self._lock:
+            if (self._active_session is not None) or self._orchestration_active or (self._pending_workers > 0):
+                return None
+            session_id = secrets.token_hex(8)
+            session = VoiceResponseSession(self, session_id)
+            self._active_session = session
+            self._orchestration_active = True
+            self._pending_workers = 0
+            return session
+
+    def _on_orchestration_finished(self, session: VoiceResponseSession):
+        with self._lock:
+            if self._active_session is session:
+                self._orchestration_active = False
+                self._maybe_release_unlocked()
+
+    def _on_worker_submitted(self, session: VoiceResponseSession):
+        with self._lock:
+            self._pending_workers += 1
+
+    def _on_worker_finished(self, session: VoiceResponseSession):
+        with self._lock:
+            if self._pending_workers > 0:
+                self._pending_workers -= 1
+            self._maybe_release_unlocked()
+
+    def _maybe_release_unlocked(self):
+        """Releases ownership only when BOTH orchestration and all submitted workers have completed."""
+        if not self._orchestration_active and self._pending_workers == 0:
+            self._active_session = None
+
+    def reset_for_test(self):
+        """Resets ownership state for isolated test execution."""
+        with self._lock:
+            self._active_session = None
+            self._pending_workers = 0
+            self._orchestration_active = False
+
+
+async def orchestrate_ptt_voice_response(
+    audio_bytes: bytes,
+    actor: str,
+    caller_role: str,
+    target_websocket: Optional[Any] = None,
+    target_device_meta: Optional[Dict[str, Any]] = None,
+    loop_executor: Optional[Any] = None,
+    db_path: Optional[str] = None,
+    ownership_session: Optional[VoiceResponseSession] = None
+) -> Dict[str, Any]:
+    """
+    Orchestrates the bounded PTT-to-TTS-to-Fire-TV voice response loop:
+    1. Runs VAD, STT, and intent matching via process_voice_pipeline.
+    2. Preserves raw transcript and strictly rejects non-system_health commands.
+    3. If matched to system_health, selects the fixed response:
+       'Living surface online. The phone and television are connected.'
+    4. Synthesizes speech through the approved local TTS adapter (en_IN-spicor-medium).
+    5. Dispatches valid PCM frames over authenticated TLS WebSocket to the verified Fire TV device.
+    6. Returns structured stage outcomes (STT, intent, TTS, delivery).
+    """
+    t0_overall = time.perf_counter()
+    loop = asyncio.get_event_loop()
+
+    # Step 1: VAD, STT, and Intent Matching (offloaded to thread executor if provided)
+    if ownership_session and loop_executor:
+        pipeline_res = await ownership_session.run_in_executor(
+            loop,
+            loop_executor,
+            process_voice_pipeline,
+            audio_bytes,
+            actor,
+            "0.5B",
+            False,
+            db_path,
+            caller_role
+        )
+    elif loop_executor:
+        pipeline_res = await loop.run_in_executor(
+            loop_executor,
+            process_voice_pipeline,
+            audio_bytes,
+            actor,
+            "0.5B",
+            False,
+            db_path,
+            caller_role
+        )
+    else:
+        pipeline_res = process_voice_pipeline(
+            audio_bytes=audio_bytes,
+            actor=actor,
+            caller_role=caller_role,
+            db_path=db_path
+        )
+
+    # Step 2: Verification of Role Confinement & Intent Outcome
+    # For rejected, mixed, consequential, or unrecognized input:
+    # Zero TTS calls, zero audio dispatch, zero LLM calls, zero Sentinel queue writes.
+    if pipeline_res.status != "fast_path_system_health":
+        return {
+            "success": False,
+            "status": pipeline_res.status,
+            "speech": pipeline_res.speech,
+            "action": pipeline_res.action,
+            "tier": pipeline_res.tier,
+            "transcript": pipeline_res.transcript,
+            "latency_ms": pipeline_res.latency_ms,
+            "tts": None,
+            "delivery": None
+        }
+
+    fixed_response_text = "Living surface online. The phone and television are connected."
+
+    # Step 3: Approved Local TTS Synthesis
+    from aeonix.core.tts import synthesize_speech
+    tts_success = False
+    tts_err = ""
+    wav_bytes = b""
+    tts_metrics: Dict[str, Any] = {}
+
+    try:
+        if ownership_session and loop_executor:
+            tts_success, tts_err, wav_bytes, tts_metrics = await ownership_session.run_in_executor(
+                loop,
+                loop_executor,
+                synthesize_speech,
+                fixed_response_text,
+                "prism_primary"
+            )
+        elif loop_executor:
+            tts_success, tts_err, wav_bytes, tts_metrics = await loop.run_in_executor(
+                loop_executor,
+                synthesize_speech,
+                fixed_response_text,
+                "prism_primary"
+            )
+        else:
+            tts_success, tts_err, wav_bytes, tts_metrics = synthesize_speech(
+                fixed_response_text,
+                profile_name="prism_primary"
+            )
+    except Exception as e:
+        tts_success = False
+        tts_err = str(e)
+        tts_metrics = {"error": tts_err}
+
+    tts_stage_outcome = {
+        "status": "success" if tts_success else "tts_error",
+        "error": tts_err if not tts_success else None,
+        "profile": "prism_primary",
+        "model": "en_IN-spicor-medium",
+        **tts_metrics
+    }
+
+    if not tts_success:
+        return {
+            "success": False,
+            "status": "tts_error",
+            "speech": fixed_response_text,
+            "action": pipeline_res.action,
+            "tier": pipeline_res.tier,
+            "transcript": pipeline_res.transcript,
+            "latency_ms": round((time.perf_counter() - t0_overall) * 1000, 2),
+            "tts": tts_stage_outcome,
+            "delivery": {
+                "status": "skipped",
+                "reason": f"TTS synthesis failed: {tts_err}",
+                "delivered": False
+            }
+        }
+
+    # Step 4: Authenticated Fire TV Voice Audio Transport
+    if target_websocket is None:
+        return {
+            "success": True,
+            "status": "delivery_unavailable",
+            "speech": fixed_response_text,
+            "action": pipeline_res.action,
+            "tier": pipeline_res.tier,
+            "transcript": pipeline_res.transcript,
+            "latency_ms": round((time.perf_counter() - t0_overall) * 1000, 2),
+            "tts": tts_stage_outcome,
+            "delivery": {
+                "status": "delivery_unavailable",
+                "reason": "No authorized Fire TV Glass terminal connected",
+                "target_device": "firetv_glass",
+                "role": "FIRETV_GLASS",
+                "delivered": False
+            }
+        }
+
+    from aeonix.core.voice_protocol import stream_voice_audio
+    msg_id = f"voice-ptt-{int(time.time() * 1000)}"
+    meta = target_device_meta or {}
+    dev_id = meta.get("device_id", "firetv_glass")
+    dev_role = meta.get("role", "FIRETV_GLASS")
+
+    try:
+        stream_res = await stream_voice_audio(target_websocket, wav_bytes, message_id=msg_id, chunk_size=16384)
+        audio_duration_s = tts_metrics.get("audio_duration_seconds", 4.145)
+        delivery_stage_outcome = {
+            "status": "delivered_to_socket",
+            "target_device": dev_id,
+            "role": dev_role,
+            "message_id": msg_id,
+            "total_bytes": stream_res.get("total_bytes", len(wav_bytes)),
+            "chunks_sent": stream_res.get("chunks_sent", 0),
+            "estimated_playback_wait_seconds": round(audio_duration_s + 1.2, 3),
+            "confirmed_playback": False
+        }
+        status_str = "voice_loop_delivered"
+        success_bool = True
+    except Exception as tx_err:
+        delivery_stage_outcome = {
+            "status": "transport_error",
+            "error": str(tx_err),
+            "target_device": dev_id,
+            "role": dev_role,
+            "message_id": msg_id,
+            "delivered": False
+        }
+        status_str = "transport_error"
+        success_bool = False
+
+    return {
+        "success": success_bool,
+        "status": status_str,
+        "speech": fixed_response_text,
+        "action": pipeline_res.action,
+        "tier": pipeline_res.tier,
+        "transcript": pipeline_res.transcript,
+        "latency_ms": round((time.perf_counter() - t0_overall) * 1000, 2),
+        "tts": tts_stage_outcome,
+        "delivery": delivery_stage_outcome
+    }

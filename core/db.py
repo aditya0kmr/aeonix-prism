@@ -233,6 +233,21 @@ def init_database(db_path: Optional[str] = None) -> bool:
         reason TEXT
     );
 
+    -- Device Identity Revocation (Revokes all tokens for a device_id)
+    CREATE TABLE IF NOT EXISTS revoked_devices (
+        device_id TEXT PRIMARY KEY,
+        revoked_at REAL NOT NULL,
+        reason TEXT
+    );
+
+    -- PTT Operator Console Single-Use Bootstrap Secrets
+    CREATE TABLE IF NOT EXISTS ptt_bootstrap (
+        code_hash TEXT PRIMARY KEY,
+        created_at REAL NOT NULL,
+        expires_at REAL NOT NULL,
+        used_at REAL DEFAULT NULL
+    );
+
     -- Execution Order Nonces (Replay Attack Prevention)
     CREATE TABLE IF NOT EXISTS execution_order_nonces (
         nonce TEXT PRIMARY KEY,
@@ -477,6 +492,85 @@ def revoke_token(nonce: str, reason: str = "Operator Revocation", db_path: Optio
     conn.close()
     log_audit_event("SECURITY", "revoke_token", nonce, "revoked", {"reason": reason}, db_path=db_path)
     return True
+
+def is_device_revoked(device_id: str, db_path: Optional[str] = None) -> bool:
+    """Checks if a device identity has been revoked."""
+    if not device_id:
+        return True
+    try:
+        conn = get_connection(db_path)
+        cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS revoked_devices (device_id TEXT PRIMARY KEY, revoked_at REAL NOT NULL, reason TEXT);")
+        cur.execute("SELECT device_id FROM revoked_devices WHERE device_id = ?;", (device_id,))
+        revoked = cur.fetchone() is not None
+        conn.close()
+        return revoked
+    except Exception:
+        return False
+
+def revoke_device(device_id: str, reason: str = "Operator Device Revocation", db_path: Optional[str] = None) -> bool:
+    """Revokes an entire device identity permanently, invalidating all current and future tokens for that device."""
+    if not device_id:
+        return False
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS revoked_devices (device_id TEXT PRIMARY KEY, revoked_at REAL NOT NULL, reason TEXT);")
+    cur.execute("INSERT OR REPLACE INTO revoked_devices (device_id, revoked_at, reason) VALUES (?, ?, ?);",
+                (device_id, time.time(), reason))
+    conn.commit()
+    conn.close()
+    log_audit_event("SECURITY", "revoke_device", device_id, "revoked", {"reason": reason}, db_path=db_path)
+    return True
+
+def create_bootstrap_record(code_hash: str, ttl_seconds: int = 300, db_path: Optional[str] = None) -> bool:
+    """
+    Creates a single-use bootstrap secret record in the vault.
+    Enforces invariant: Only one active bootstrap secret exists at any time.
+    Generating a new secret atomically invalidates any previous unused secret.
+    """
+    if not code_hash:
+        return False
+    now = time.time()
+    expires_at = now + min(ttl_seconds, 300)
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE IF NOT EXISTS ptt_bootstrap (code_hash TEXT PRIMARY KEY, created_at REAL NOT NULL, expires_at REAL NOT NULL, used_at REAL DEFAULT NULL);")
+    # Invalidate any existing unused bootstrap secrets for this console
+    cur.execute("UPDATE ptt_bootstrap SET used_at = ? WHERE used_at IS NULL;", (now,))
+    # Insert new bootstrap secret hash
+    cur.execute("INSERT INTO ptt_bootstrap (code_hash, created_at, expires_at, used_at) VALUES (?, ?, ?, NULL);",
+                (code_hash, now, expires_at))
+    # Purge stale expired/consumed records older than 24 hours
+    cur.execute("DELETE FROM ptt_bootstrap WHERE expires_at < ?;", (now - 86400,))
+    conn.commit()
+    conn.close()
+    return True
+
+def consume_bootstrap_code_atomic(code_hash: str, db_path: Optional[str] = None) -> bool:
+    """
+    Atomically validates and marks a bootstrap code as consumed.
+    Guarantees that exactly one concurrent exchange can succeed.
+    Returns True if successfully consumed; False if missing, expired, or already used.
+    """
+    if not code_hash:
+        return False
+    now = time.time()
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+    try:
+        cur.execute("CREATE TABLE IF NOT EXISTS ptt_bootstrap (code_hash TEXT PRIMARY KEY, created_at REAL NOT NULL, expires_at REAL NOT NULL, used_at REAL DEFAULT NULL);")
+        # Atomic test-and-set: updates used_at ONLY if currently NULL and unexpired
+        cur.execute(
+            "UPDATE ptt_bootstrap SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?;",
+            (now, code_hash, now)
+        )
+        conn.commit()
+        consumed = (cur.rowcount == 1)
+        conn.close()
+        return consumed
+    except Exception:
+        conn.close()
+        return False
 
 def record_order_nonce(nonce: str, mission_id: str, db_path: Optional[str] = None) -> bool:
     """

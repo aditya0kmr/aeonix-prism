@@ -202,9 +202,10 @@ def get_ptt_console_html(api_token: str = "") -> str:
 
 <header>
   <div class="brand">ÆONIX PRISM</div>
-  <div style="display:flex; gap:6px;">
-    <span id="tv-status-badge" class="badge">TV: DISCONNECTED</span>
-    <span id="lockdown-badge" class="badge">DEFENSE: NOMINAL</span>
+  <div style="display:flex; gap:6px; align-items:center;">
+    <span id="tv-status-badge" class="badge">TV: --</span>
+    <span id="lockdown-badge" class="badge">DEFENSE: --</span>
+    <button id="session-logout-btn" style="display:none; background:none; border:1px solid var(--accent-red); color:var(--accent-red); padding:3px 6px; border-radius:4px; font-size:0.7rem; cursor:pointer;">EXIT</button>
   </div>
 </header>
 
@@ -239,7 +240,7 @@ def get_ptt_console_html(api_token: str = "") -> str:
 
 <section class="section" id="sentinel-deck">
   <div class="section-title">Sentinel Approval Deck <span id="pending-count" class="badge">0</span></div>
-  <div id="pending-list" style="font-size:0.85rem; color:var(--text-secondary);">No pending approvals. Sovereign gate is clear.</div>
+  <div id="pending-list" style="font-size:0.85rem; color:var(--text-secondary);">--</div>
 </section>
 
 <section class="section">
@@ -247,21 +248,155 @@ def get_ptt_console_html(api_token: str = "") -> str:
   <div class="grid-2">
     <div class="stat-card">
       <div class="stat-label">Model Engine</div>
-      <div class="stat-val" id="model-val">None (Burst Only)</div>
+      <div class="stat-val" id="model-val">--</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">RAM Queue</div>
-      <div class="stat-val" id="queue-val">0 / 10</div>
+      <div class="stat-val" id="queue-val">--</div>
     </div>
   </div>
   <button id="sanctuary-btn" class="btn-emergency">ACTIVATE SANCTUARY LOCKDOWN</button>
 </section>
 
+<!-- Volatile In-Memory Authentication Overlay -->
+<div id="auth-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(8,12,16,0.96); z-index:9999; flex-direction:column; justify-content:center; align-items:center; padding:20px;">
+  <div style="background:var(--card-bg); border:1px solid var(--accent-cyan); border-radius:8px; padding:24px; max-width:400px; width:100%; text-align:center;">
+    <div style="color:var(--accent-cyan); font-weight:700; margin-bottom:12px; font-size:1.1rem; letter-spacing:0.05em;">OPERATOR AUTHENTICATION</div>
+    <div style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:16px;">
+      Enter single-use 128-bit bootstrap secret from POCO Termux CLI (<code style="color:var(--accent-cyan);">python3 scripts/bootstrap_ptt_operator.py</code>).
+    </div>
+    <input id="auth-code-input" type="text" placeholder="32-character hex secret" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%; padding:12px; border-radius:4px; border:1px solid var(--card-border); background:#080c10; color:#fff; font-size:0.95rem; margin-bottom:12px; text-align:center;">
+    <button id="auth-submit-btn" style="width:100%; padding:12px; border-radius:4px; border:none; background:var(--accent-cyan); color:#080c10; font-weight:700; font-size:1rem; cursor:pointer;">AUTHENTICATE SESSION</button>
+    <div id="auth-error-msg" style="color:var(--accent-red); font-size:0.8rem; margin-top:10px; display:none;"></div>
+  </div>
+</div>
+
 <script>
   let isRecording = false;
   let timerInterval = null;
   let startTime = null;
-  const token = "{api_token}";
+  let token = "{api_token}";
+  let sessionExpiryTimer = null;
+
+  const authOverlay = document.getElementById('auth-overlay');
+  const authInput = document.getElementById('auth-code-input');
+  const authBtn = document.getElementById('auth-submit-btn');
+  const authError = document.getElementById('auth-error-msg');
+  const logoutBtn = document.getElementById('session-logout-btn');
+
+  function checkAuthRequirement() {{
+    if (!token) {{
+      authOverlay.style.display = 'flex';
+      if (logoutBtn) logoutBtn.style.display = 'none';
+    }} else {{
+      authOverlay.style.display = 'none';
+      if (logoutBtn) logoutBtn.style.display = 'inline-block';
+    }}
+  }}
+
+  // Shared cleanup path for explicit logout, session expiry, and authentication failure
+  function cleanupSession(reason = 'logout', noticeMsg = 'Session closed.') {{
+    if (sessionExpiryTimer) {{
+      clearTimeout(sessionExpiryTimer);
+      sessionExpiryTimer = null;
+    }}
+    if (isRecording) {{
+      isRecording = false;
+      if (timerInterval) {{
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }}
+      if (typeof pttBtn !== 'undefined' && pttBtn) {{
+        pttBtn.classList.remove('active');
+        pttBtn.setAttribute('aria-pressed', 'false');
+      }}
+      if (typeof recIndicator !== 'undefined' && recIndicator) recIndicator.classList.remove('active');
+      if (typeof btnLabel !== 'undefined' && btnLabel) btnLabel.textContent = 'HOLD TO TALK';
+      if (typeof stateText !== 'undefined' && stateText) stateText.textContent = 'IDLE';
+    }}
+    capturedChunks = [];
+    releaseMicHardware();
+    token = '';
+    if (typeof tvBadge !== 'undefined' && tvBadge) {{
+      tvBadge.textContent = 'TV: --';
+      tvBadge.className = 'badge';
+    }}
+    if (typeof lockdownBadge !== 'undefined' && lockdownBadge) {{
+      lockdownBadge.textContent = 'DEFENSE: --';
+      lockdownBadge.className = 'badge';
+    }}
+    if (typeof modelVal !== 'undefined' && modelVal) modelVal.textContent = '--';
+    if (typeof queueVal !== 'undefined' && queueVal) queueVal.textContent = '--';
+    if (typeof pendingList !== 'undefined' && pendingList) pendingList.textContent = '--';
+    checkAuthRequirement();
+    if (noticeMsg) {{
+      showNotice(noticeMsg, reason === 'error' || reason === 'auth_failure' || reason === 'expired' ? 'error' : 'info');
+    }}
+  }}
+
+  authBtn.addEventListener('click', async () => {{
+    const val = authInput.value.trim();
+    if (!val) {{
+      authError.textContent = 'Please enter a 32-character hex bootstrap secret.';
+      authError.style.display = 'block';
+      return;
+    }}
+    if (!/^[0-9a-fA-F]{{32}}$/.test(val)) {{
+      authError.textContent = 'Invalid format: Secret must be exactly 32 hexadecimal characters.';
+      authError.style.display = 'block';
+      return;
+    }}
+    authError.style.display = 'none';
+    authBtn.textContent = 'VERIFYING...';
+    authBtn.disabled = true;
+
+    try {{
+      // Route 100% of modal submissions strictly through POST /api/ptt/bootstrap
+      const res = await fetch('/api/ptt/bootstrap', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ secret: val }})
+      }});
+      const data = await res.json();
+      if (data.token) {{
+        token = data.token;
+        authInput.value = '';
+        authOverlay.style.display = 'none';
+        if (logoutBtn) logoutBtn.style.display = 'inline-block';
+        showNotice('PTT Operator session authenticated (volatile memory).', 'info');
+        if (sessionExpiryTimer) clearTimeout(sessionExpiryTimer);
+        const ttlSec = (data.expires_in && typeof data.expires_in === 'number') ? data.expires_in : 900;
+        sessionExpiryTimer = setTimeout(() => {{
+          cleanupSession('expired', 'Session expired (15-min limit reached). Please generate a new bootstrap secret.');
+        }}, ttlSec * 1000);
+        refreshStatus();
+      }} else {{
+        authError.textContent = data.detail || 'Invalid or expired bootstrap secret.';
+        authError.style.display = 'block';
+      }}
+    }} catch (err) {{
+      authError.textContent = 'Connection error: ' + err.message;
+      authError.style.display = 'block';
+    }} finally {{
+      authBtn.textContent = 'AUTHENTICATE SESSION';
+      authBtn.disabled = false;
+    }}
+  }});
+
+  if (logoutBtn) {{
+    logoutBtn.addEventListener('click', async () => {{
+      const activeToken = token;
+      cleanupSession('logout', 'Session closed and token revoked.');
+      if (activeToken) {{
+        try {{
+          await fetch('/api/ptt/logout', {{
+            method: 'POST',
+            headers: {{ 'Authorization': 'Bearer ' + activeToken }}
+          }});
+        }} catch(e) {{}}
+      }}
+    }});
+  }}
 
   const pttBtn = document.getElementById('ptt-btn');
   const btnLabel = document.getElementById('btn-label');
@@ -570,7 +705,12 @@ def get_ptt_console_html(api_token: str = "") -> str:
 
   // Status and Sentinel refresh
   async function refreshStatus() {{
+    if (!token) return;
     const s = await apiCall('/api/ptt/status');
+    if (s && s.error && (s.error.includes('UNAUTHENTICATED') || s.error.includes('Invalid, expired') || s.error.includes('FORBIDDEN'))) {{
+      cleanupSession('auth_failure', 'Session invalid or expired. Re-authentication required.');
+      return;
+    }}
     if (s && s.ptt) {{
       if (s.sanctuary && s.sanctuary.is_active) {{
         lockdownBadge.textContent = 'SANCTUARY ACTIVE';
@@ -644,6 +784,7 @@ def get_ptt_console_html(api_token: str = "") -> str:
     refreshStatus();
   }});
 
+  checkAuthRequirement();
   setInterval(refreshStatus, 3000);
   refreshStatus();
 </script>

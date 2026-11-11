@@ -33,7 +33,8 @@ KEY_FILE = os.path.join(SECRETS_DIR, "master_key.json")
 ROLE_POCO_CORE = "POCO_CORE"
 ROLE_FIRETV_GLASS = "FIRETV_GLASS"
 ROLE_AGENT_EXECUTOR = "AGENT_EXECUTOR"
-VALID_ROLES = {ROLE_POCO_CORE, ROLE_FIRETV_GLASS, ROLE_AGENT_EXECUTOR}
+ROLE_PTT_OPERATOR = "PTT_OPERATOR"
+VALID_ROLES = {ROLE_POCO_CORE, ROLE_FIRETV_GLASS, ROLE_AGENT_EXECUTOR, ROLE_PTT_OPERATOR}
 
 def _ensure_secrets_storage(secrets_dir: Optional[str] = None) -> bytes:
     """Ensures secret storage directory exists with strict 0o700/0o600 permissions and loads/creates master key."""
@@ -123,9 +124,11 @@ def verify_token(token_str: str, secrets_dir: Optional[str] = None, db_path: Opt
         if now > payload.get("expires_at", 0):
             return None # Expired
 
-        # Check token revocation
-        from aeonix.core.db import is_token_revoked
+        # Check token and device revocation
+        from aeonix.core.db import is_token_revoked, is_device_revoked
         if is_token_revoked(payload.get("nonce", ""), db_path=db_path):
+            return None
+        if is_device_revoked(payload.get("device_id", ""), db_path=db_path):
             return None
 
         return payload
@@ -158,3 +161,53 @@ def get_or_create_device_token(device_id: str, role: str, secrets_dir: Optional[
 # Pre-generate durable sovereign tokens
 POCO_CORE_TOKEN = get_or_create_device_token("poco_m4_pro_core", ROLE_POCO_CORE)
 FIRETV_GLASS_TOKEN = get_or_create_device_token("firetv_stick_glass", ROLE_FIRETV_GLASS)
+
+def generate_bootstrap_secret(ttl_seconds: int = 300, db_path: Optional[str] = None) -> Tuple[str, str]:
+    """
+    Generates a cryptographically random, 128-bit single-use bootstrap secret.
+    Stores only the SHA-256 hash in the shared sovereign database.
+    Invalidates any previously active bootstrap secrets.
+    """
+    secret = secrets.token_hex(16) # 128 bits of entropy
+    code_hash = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+    from aeonix.core.db import create_bootstrap_record
+    create_bootstrap_record(code_hash, ttl_seconds=min(ttl_seconds, 300), db_path=db_path)
+    return secret, code_hash
+
+def exchange_bootstrap_secret(secret: str, db_path: Optional[str] = None, secrets_dir: Optional[str] = None) -> Optional[str]:
+    """
+    Atomically exchanges a valid, unexpired single-use bootstrap secret for a short-lived ROLE_PTT_OPERATOR session token.
+    Uses database-level atomic test-and-set consumption.
+    Rejects missing, expired, replayed, or invalid secrets with None.
+    """
+    if not secret or len(secret) < 16:
+        return None
+
+    code_hash = hashlib.sha256(secret.strip().encode("utf-8")).hexdigest()
+
+    from aeonix.core.db import consume_bootstrap_code_atomic
+    consumed = consume_bootstrap_code_atomic(code_hash, db_path=db_path)
+    if not consumed:
+        return None
+
+    # Issue strictly short-lived (15-min / 900s) ROLE_PTT_OPERATOR session token
+    session_token = issue_device_token(
+        device_id="poco_ptt_operator",
+        role=ROLE_PTT_OPERATOR,
+        ttl_seconds=900,
+        secrets_dir=secrets_dir
+    )
+    return session_token
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "bootstrap":
+        secret, code_hash = generate_bootstrap_secret()
+        print("\n" + "=" * 60)
+        print("ÆONIX PRISM // Sovereign PTT Operator Bootstrap")
+        print("=" * 60)
+        print(f"One-Time Bootstrap Secret: {secret}")
+        print("Validity: 5 minutes (single use)")
+        print("Role: PTT_OPERATOR (strictly limited to PTT endpoints)")
+        print("=" * 60 + "\n")

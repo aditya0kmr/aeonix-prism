@@ -87,10 +87,12 @@ class TestPttConsoleAndEndpoints(unittest.TestCase):
     # 1. Console Page Loads Locally
     # -------------------------------------------------------------------------
     def test_01_console_loads_locally(self):
-        """GET /ui/ptt loads local operator console HTML with zero external script/font links."""
-        # Unauthenticated request rejected
+        """GET /ui/ptt loads public static credential-free shell with zero external links."""
+        # Unauthenticated request loads public static credential-free shell
         unauth_res = self.client.get("/ui/ptt")
-        self.assertEqual(unauth_res.status_code, 401)
+        self.assertEqual(unauth_res.status_code, 200)
+        self.assertIn("text/html", unauth_res.headers.get("content-type", ""))
+        self.assertIn('let token = "";', unauth_res.text)
 
         # Authenticated request with Bearer header
         headers = {"Authorization": f"Bearer {self.poco_token}"}
@@ -99,9 +101,15 @@ class TestPttConsoleAndEndpoints(unittest.TestCase):
         self.assertIn("text/html", res.headers.get("content-type", ""))
         body = res.text
 
-        # Authenticated request with query param token
+        # Query param token does not authenticate or embed into public shell
         query_res = self.client.get(f"/ui/ptt?token={self.poco_token}")
         self.assertEqual(query_res.status_code, 200)
+        self.assertNotIn(self.poco_token, query_res.text)
+        self.assertIn('let token = "";', query_res.text)
+
+        # Protected endpoints strictly reject query-param tokens (401)
+        protected_query_res = self.client.get(f"/api/ptt/status?token={self.poco_token}")
+        self.assertEqual(protected_query_res.status_code, 401)
 
         # Verify key UI components
         self.assertIn("ÆONIX PRISM", body)

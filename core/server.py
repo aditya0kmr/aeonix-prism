@@ -30,6 +30,9 @@ from aeonix.core.auth import (
     ROLE_POCO_CORE,
     ROLE_FIRETV_GLASS,
     ROLE_AGENT_EXECUTOR,
+    ROLE_PTT_OPERATOR,
+    exchange_bootstrap_secret,
+    generate_bootstrap_secret,
     POCO_CORE_TOKEN,
     FIRETV_GLASS_TOKEN
 )
@@ -85,8 +88,31 @@ def get_request_identity(request) -> Tuple[str, str]:
 
     return "UNAUTHENTICATED", "untrusted"
 
-# Connected Fire TV and client WebSockets
+# Connected Fire TV and client WebSockets with authenticated identity metadata
 active_connections: Set[WebSocket] = set()
+active_terminals: Dict[WebSocket, Dict[str, Any]] = {}
+
+# PTT Voice Response concurrency and ownership manager (enforces strict one-response-at-a-time execution)
+from aeonix.core.voice_pipeline import VoiceResponseOwnership, VoiceResponseSession
+_voice_response_ownership = VoiceResponseOwnership()
+
+def get_voice_response_ownership() -> VoiceResponseOwnership:
+    return _voice_response_ownership
+
+def get_ptt_voice_response_lock() -> VoiceResponseOwnership:
+    """Compatibility interface returning the ownership manager which provides .locked()."""
+    return _voice_response_ownership
+
+def get_authorized_firetv_websocket() -> Tuple[Optional[WebSocket], Optional[Dict[str, Any]]]:
+    """
+    Returns the active WebSocket and metadata for an authenticated Fire TV Glass device.
+    Reconciles configured device identities ('firetv_glass', 'firetv_stick_glass')
+    with verified role ROLE_FIRETV_GLASS.
+    """
+    for ws, meta in list(active_terminals.items()):
+        if meta.get("role") == ROLE_FIRETV_GLASS and meta.get("device_id") in ("firetv_glass", "firetv_stick_glass"):
+            return ws, meta
+    return None, None
 
 def get_configured_port() -> int:
     raw = os.getenv("AEONIX_PORT", "8080").strip()
@@ -333,6 +359,7 @@ async def broadcast_message(message: dict):
             dead_connections.add(ws)
     for dead in dead_connections:
         active_connections.discard(dead)
+        active_terminals.pop(dead, None)
 
 async def process_intent_pipeline(
     user_query: str, 
@@ -574,10 +601,193 @@ async def get_voice_model_info_endpoint(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 async def get_ui_ptt(request):
-    """Serves the sovereign POCO tactile PTT operator console."""
-    token = issue_device_token("poco_console_operator", ROLE_POCO_CORE)
-    html_content = get_ptt_console_html(api_token=token)
+    """Serves the sovereign POCO tactile PTT operator console with zero embedded credentials."""
+    html_content = get_ptt_console_html(api_token="")
     return HTMLResponse(html_content)
+
+_BOOTSTRAP_RATE_LIMITS: Dict[str, List[float]] = {}
+_BOOTSTRAP_GLOBAL_ATTEMPTS: List[float] = []
+
+def _normalize_origin(origin_str: str) -> Optional[Tuple[str, str, int]]:
+    """
+    Normalizes an origin string into (scheme, hostname, port).
+    Scheme must be 'https' (or 'http' strictly under AEONIX_TEST_MODE == '1').
+    """
+    if not origin_str or origin_str == "null":
+        return None
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(origin_str.strip())
+        scheme = (p.scheme or "").lower()
+        if not scheme or scheme not in ("http", "https"):
+            return None
+        # Operational mode strictly requires https
+        if scheme != "https" and os.getenv("AEONIX_TEST_MODE") != "1":
+            return None
+        hostname = (p.hostname or "").lower()
+        if not hostname:
+            return None
+        port = p.port
+        if port is None:
+            port = 443 if scheme == "https" else 80
+        return (scheme, hostname, port)
+    except Exception:
+        return None
+
+def get_allowed_bootstrap_origins() -> Set[Tuple[str, str, int]]:
+    """
+    Returns the set of explicitly allowed normalized origins for POST /api/ptt/bootstrap.
+    In operational mode, requires HTTPS on explicitly configured origins.
+    Configured via AEONIX_BOOTSTRAP_ALLOWED_ORIGINS environment variable.
+    Test origins are only permitted when AEONIX_TEST_MODE == '1'.
+    """
+    allowed: Set[Tuple[str, str, int]] = set()
+    env_origins = os.getenv("AEONIX_BOOTSTRAP_ALLOWED_ORIGINS")
+    if env_origins:
+        for orig in env_origins.split(","):
+            norm = _normalize_origin(orig.strip())
+            if norm:
+                allowed.add(norm)
+
+    if os.getenv("AEONIX_TEST_MODE") == "1":
+        # Test-only origins permitted strictly during test execution
+        test_origins = os.getenv("AEONIX_TEST_ALLOWED_ORIGINS", "http://testserver,https://testserver")
+        for orig in test_origins.split(","):
+            norm = _normalize_origin(orig.strip())
+            if norm:
+                allowed.add(norm)
+    return allowed
+
+async def post_api_ptt_bootstrap(request):
+    """
+    Exchanges a single-use 128-bit bootstrap secret for a short-lived ROLE_PTT_OPERATOR session token.
+    Defenses:
+    - Origin: strict normalized allowlist comparison; reject absent/null/unapproved origins.
+    - Content-Type: application/json required.
+    - Bounded body reading: streaming with Content-Length pre-check and 1024-byte ceiling.
+    - Rate limits: bounded per-IP (5/min) and global (20/min).
+    - Format validation: 32 hex chars required.
+    - Generic non-reflective 401 on failure; Cache-Control: no-store on response.
+    """
+    # 1. Origin header check (mandatory, strict allowlist)
+    origin = request.headers.get("origin")
+    if not origin:
+        return JSONResponse({"error": "FORBIDDEN", "detail": "Origin header required"}, status_code=403, headers={"Cache-Control": "no-store"})
+    if origin == "null":
+        return JSONResponse({"error": "FORBIDDEN", "detail": "Null origin rejected"}, status_code=403, headers={"Cache-Control": "no-store"})
+
+    norm_origin = _normalize_origin(origin)
+    if not norm_origin:
+        return JSONResponse({"error": "FORBIDDEN", "detail": "Malformed, insecure, or unapproved origin"}, status_code=403, headers={"Cache-Control": "no-store"})
+
+    allowed_origins = get_allowed_bootstrap_origins()
+    if norm_origin not in allowed_origins:
+        return JSONResponse({"error": "FORBIDDEN", "detail": "Origin not permitted"}, status_code=403, headers={"Cache-Control": "no-store"})
+
+    # 2. Content-Type check
+    ct = request.headers.get("content-type", "").lower()
+    if not ct.startswith("application/json"):
+        return JSONResponse({"error": "BAD_REQUEST", "detail": "Content-Type must be application/json"}, status_code=400, headers={"Cache-Control": "no-store"})
+
+    # 3. Rate limiting (using request.client.host, not spoofable X-Forwarded-For)
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+
+    global _BOOTSTRAP_GLOBAL_ATTEMPTS, _BOOTSTRAP_RATE_LIMITS
+    client_attempts = [t for t in _BOOTSTRAP_RATE_LIMITS.get(client_ip, []) if now - t < 60.0]
+    if len(client_attempts) >= 5:
+        return JSONResponse(
+            {"error": "RATE_LIMIT_EXCEEDED", "detail": "Too many bootstrap attempts. Try again later."},
+            status_code=429,
+            headers={"Cache-Control": "no-store"}
+        )
+    client_attempts.append(now)
+    _BOOTSTRAP_RATE_LIMITS[client_ip] = client_attempts
+
+    _BOOTSTRAP_GLOBAL_ATTEMPTS = [t for t in _BOOTSTRAP_GLOBAL_ATTEMPTS if now - t < 60.0]
+    if len(_BOOTSTRAP_GLOBAL_ATTEMPTS) >= 20:
+        return JSONResponse(
+            {"error": "RATE_LIMIT_EXCEEDED", "detail": "Service busy. Try again later."},
+            status_code=429,
+            headers={"Cache-Control": "no-store"}
+        )
+    _BOOTSTRAP_GLOBAL_ATTEMPTS.append(now)
+
+    if len(_BOOTSTRAP_RATE_LIMITS) > 100:
+        _BOOTSTRAP_RATE_LIMITS = {k: v for k, v in _BOOTSTRAP_RATE_LIMITS.items() if any(now - t < 60.0 for t in v)}
+
+    # 4. Incremental bounded body reading (max 1024 bytes)
+    cl_header = request.headers.get("content-length")
+    if cl_header:
+        try:
+            cl = int(cl_header.strip())
+            if cl > 1024:
+                return JSONResponse({"error": "PAYLOAD_TOO_LARGE", "detail": "Payload exceeds 1024 bytes"}, status_code=413, headers={"Cache-Control": "no-store"})
+        except ValueError:
+            return JSONResponse({"error": "BAD_REQUEST", "detail": "Malformed Content-Length"}, status_code=400, headers={"Cache-Control": "no-store"})
+
+    chunks = []
+    total_bytes = 0
+    max_bytes = 1024
+    async for chunk in request.stream():
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            chunks.clear()
+            return JSONResponse({"error": "PAYLOAD_TOO_LARGE", "detail": "Payload exceeds 1024 bytes"}, status_code=413, headers={"Cache-Control": "no-store"})
+        chunks.append(chunk)
+
+    raw_body = b"".join(chunks)
+    chunks.clear()
+
+    try:
+        body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    except Exception:
+        return JSONResponse({"error": "BAD_REQUEST", "detail": "Invalid JSON"}, status_code=400, headers={"Cache-Control": "no-store"})
+
+    secret = str(body.get("secret", "") or body.get("code", "")).strip()
+    # Format validation: 128-bit hex string (exactly 32 hex chars)
+    if not secret or len(secret) != 32 or not all(c in "0123456789abcdefABCDEF" for c in secret):
+        return JSONResponse(
+            {"error": "UNAUTHENTICATED", "detail": "Invalid or expired bootstrap secret"},
+            status_code=401,
+            headers={"Cache-Control": "no-store"}
+        )
+
+    # 5. Atomic exchange using shared vault path
+    from aeonix.core.db import get_db_path
+    from aeonix.core.auth import get_secrets_dir
+    d_path = os.environ.get("AEONIX_DB_PATH") or get_db_path()
+    s_dir = os.environ.get("AEONIX_SECRETS_DIR") or get_secrets_dir()
+    token = exchange_bootstrap_secret(secret, db_path=d_path, secrets_dir=s_dir)
+    if not token:
+        return JSONResponse(
+            {"error": "UNAUTHENTICATED", "detail": "Invalid or expired bootstrap secret"},
+            status_code=401,
+            headers={"Cache-Control": "no-store"}
+        )
+
+    return JSONResponse(
+        {
+            "token": token,
+            "role": ROLE_PTT_OPERATOR,
+            "expires_in": 900,
+            "token_type": "Bearer"
+        },
+        headers={"Cache-Control": "no-store"}
+    )
+
+async def post_api_ptt_logout(request):
+    """Explicitly revokes the current operator session token."""
+    auth_header = request.headers.get("Authorization", "") or request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        payload = verify_token(token)
+        if payload and "nonce" in payload:
+            from aeonix.core.db import revoke_token, get_db_path
+            d_path = os.environ.get("AEONIX_DB_PATH") or get_db_path()
+            revoke_token(payload["nonce"], reason="Operator logout", db_path=d_path)
+            return JSONResponse({"status": "revoked", "detail": "Session token explicitly revoked"})
+    return JSONResponse({"status": "noop", "detail": "No active token found to revoke"})
 
 async def post_api_ptt_start(request):
     """Starts explicit POCO push-to-talk recording with burst rate-limiting."""
@@ -687,13 +897,72 @@ async def post_api_ptt_stop(request):
             }
         })
 
+    # Dedicated bounded voice response loop for ROLE_PTT_OPERATOR
+    if auth_role == ROLE_PTT_OPERATOR:
+        ownership = get_voice_response_ownership()
+        session = ownership.try_acquire()
+        if not session:
+            return JSONResponse({
+                "status": "busy",
+                "error": "VOICE_PIPELINE_BUSY: A voice response is already in progress. Overlapping responses are prohibited.",
+                "pipeline": {
+                    "success": False,
+                    "status": "voice_pipeline_busy"
+                }
+            }, status_code=409)
+
+        try:
+            from aeonix.core.voice_pipeline import orchestrate_ptt_voice_response
+            target_ws, target_meta = get_authorized_firetv_websocket()
+            orchestration_res = await asyncio.wait_for(
+                orchestrate_ptt_voice_response(
+                    audio_bytes=audio_bytes,
+                    actor=actor,
+                    caller_role=auth_role,
+                    target_websocket=target_ws,
+                    target_device_meta=target_meta,
+                    loop_executor=heavy_executor,
+                    db_path=os.environ.get("AEONIX_DB_PATH"),
+                    ownership_session=session
+                ),
+                timeout=30.0
+            )
+            return JSONResponse({
+                **stop_res,
+                "pipeline": orchestration_res
+            })
+        except asyncio.TimeoutError:
+            session.mark_cancelled()
+            return JSONResponse({
+                **stop_res,
+                "pipeline": {
+                    "success": False,
+                    "status": "voice_pipeline_timeout",
+                    "error": "Inference and delivery exceeded 30.0s execution ceiling"
+                }
+            }, status_code=504)
+        except Exception as e:
+            session.mark_cancelled()
+            return JSONResponse({
+                **stop_res,
+                "pipeline": {
+                    "success": False,
+                    "status": "voice_pipeline_error",
+                    "error": str(e)
+                }
+            }, status_code=500)
+        finally:
+            audio_bytes = b""
+            session.finish_orchestration()
+
     try:
         pipeline_res = process_voice_pipeline(
             audio_bytes=audio_bytes,
             actor=actor,
             model_tier=model_tier,
             allow_fallback=allow_fallback,
-            db_path=os.environ.get("AEONIX_DB_PATH")
+            db_path=os.environ.get("AEONIX_DB_PATH"),
+            caller_role=auth_role
         )
 
         return JSONResponse({
@@ -787,6 +1056,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await websocket.accept()
     active_connections.add(websocket)
+    active_terminals[websocket] = {
+        "device_id": ws_device,
+        "role": ws_role,
+        "connected_at": time.time()
+    }
     log_audit_event("GLASS_TERMINAL", "connect", "websocket", "ok", {"device": ws_device, "role": ws_role})
     
     # Audio buffer for PTT voice streaming
@@ -922,10 +1196,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 print(f"[WS Loop Error]: {loop_err}")
     except WebSocketDisconnect:
         active_connections.discard(websocket)
+        active_terminals.pop(websocket, None)
         log_audit_event("GLASS_TERMINAL", "disconnect", "websocket", "ok", {})
     except Exception as ws_err:
         print(f"[WS Connection Error]: {ws_err}")
         active_connections.discard(websocket)
+        active_terminals.pop(websocket, None)
 
 # PANOPTES Endpoints
 async def post_panoptes_scan(request):
@@ -1766,6 +2042,16 @@ async def post_claim_mission(request):
 
 PUBLIC_ENDPOINTS = {
     ("GET", "/api/status"),
+    ("GET", "/ui/ptt"),
+    ("POST", "/api/ptt/bootstrap"),
+}
+
+PTT_OPERATOR_ALLOWED_ENDPOINTS = {
+    ("GET", "/ui/ptt"),
+    ("POST", "/api/ptt/start"),
+    ("POST", "/api/ptt/stop"),
+    ("GET", "/api/ptt/status"),
+    ("POST", "/api/ptt/logout"),
 }
 
 FIRETV_ALLOWED_ENDPOINTS = {
@@ -1839,8 +2125,6 @@ class CentralAuthMiddleware(BaseHTTPMiddleware):
         token = ""
         if auth_header.startswith("Bearer "):
             token = auth_header[7:].strip()
-        elif clean_path.startswith("/ui/") and "token" in request.query_params:
-            token = request.query_params.get("token", "").strip()
 
         if not token:
             return JSONResponse(
@@ -1869,6 +2153,16 @@ class CentralAuthMiddleware(BaseHTTPMiddleware):
         # 3. RBAC Role Matrix Enforcement
         if role == ROLE_POCO_CORE:
             return await call_next(request)
+        elif role == ROLE_PTT_OPERATOR:
+            if endpoint_key in PTT_OPERATOR_ALLOWED_ENDPOINTS:
+                return await call_next(request)
+            return JSONResponse(
+                {
+                    "error": "FORBIDDEN",
+                    "detail": f"Role '{role}' is not authorized to access {request.method} {clean_path}"
+                },
+                status_code=403
+            )
         elif role == ROLE_FIRETV_GLASS:
             if endpoint_key in FIRETV_ALLOWED_ENDPOINTS:
                 return await call_next(request)
@@ -2000,6 +2294,8 @@ app = Starlette(
         Route("/api/missions/reconcile", post_reconcile_mission, methods=["POST"]),
         Route("/api/voice/model", get_voice_model_info_endpoint, methods=["GET"]),
         Route("/ui/ptt", get_ui_ptt, methods=["GET"]),
+        Route("/api/ptt/bootstrap", post_api_ptt_bootstrap, methods=["POST"]),
+        Route("/api/ptt/logout", post_api_ptt_logout, methods=["POST"]),
         Route("/api/ptt/start", post_api_ptt_start, methods=["POST"]),
         Route("/api/ptt/stop", post_api_ptt_stop, methods=["POST"]),
         Route("/api/ptt/status", get_api_ptt_status, methods=["GET"]),

@@ -402,10 +402,12 @@ class TestP03PocoMicPttMasterIntegration(unittest.TestCase):
     # 14. POCO Operator Console Loads Only Through Authenticated Local Endpoint
     # =========================================================================
     def test_14_console_loads_only_through_authenticated_endpoint(self):
-        """GET /ui/ptt loads console with Bearer header or query token, rejecting unauthenticated."""
-        # Unauthenticated rejected
+        """GET /ui/ptt loads public static shell without credentials, protected endpoints require Bearer header."""
+        # Unauthenticated shell loads without credentials
         r_unauth = self.client.get("/ui/ptt")
-        self.assertEqual(r_unauth.status_code, 401)
+        self.assertEqual(r_unauth.status_code, 200)
+        self.assertIn("let token = \"\";", r_unauth.text)
+        self.assertNotIn(self.poco_token, r_unauth.text)
 
         # Authenticated via Bearer header
         r_auth = self.client.get("/ui/ptt", headers=self.headers)
@@ -413,10 +415,15 @@ class TestP03PocoMicPttMasterIntegration(unittest.TestCase):
         self.assertIn("ÆONIX PRISM", r_auth.text)
         self.assertIn("Push-to-Talk", r_auth.text)
 
-        # Authenticated via query param token
+        # Query parameter token does not authenticate or embed into public shell
         r_query = self.client.get(f"/ui/ptt?token={self.poco_token}")
         self.assertEqual(r_query.status_code, 200)
-        self.assertIn("Push-to-Talk", r_query.text)
+        self.assertNotIn(self.poco_token, r_query.text)
+        self.assertIn('let token = "";', r_query.text)
+
+        # Protected endpoints strictly reject query-param tokens (RFC 6750 enforcement)
+        r_prot_query = self.client.get(f"/api/ptt/status?token={self.poco_token}")
+        self.assertEqual(r_prot_query.status_code, 401)
 
     # =========================================================================
     # 15. Unauthenticated Access to PTT Endpoints Rejected

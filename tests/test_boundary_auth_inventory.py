@@ -87,13 +87,36 @@ class TestBoundaryAuthInventory(unittest.TestCase):
             os.environ.pop("AEONIX_DB_PATH", None)
         shutil.rmtree(cls.test_dir, ignore_errors=True)
 
+    def test_00_public_endpoints_match_exact_security_specification(self):
+        """PUBLIC_ENDPOINTS must match the independent, hardcoded specification exactly. Any addition requires explicit review."""
+        EXPECTED_PUBLIC_ENDPOINTS = {
+            ("GET", "/api/status"),
+            ("GET", "/ui/ptt"),
+            ("POST", "/api/ptt/bootstrap"),
+        }
+        self.assertEqual(
+            PUBLIC_ENDPOINTS,
+            EXPECTED_PUBLIC_ENDPOINTS,
+            f"PUBLIC_ENDPOINTS deviates from specification! Unexpected: {PUBLIC_ENDPOINTS - EXPECTED_PUBLIC_ENDPOINTS}, Missing: {EXPECTED_PUBLIC_ENDPOINTS - PUBLIC_ENDPOINTS}"
+        )
+
     def test_01_dynamic_route_inventory_default_deny_unauthenticated(self):
-        """Every registered HTTP route (except GET /api/status) MUST reject unauthenticated requests with 401."""
+        """Every registered HTTP route (except independent EXPECTED_PUBLIC_ENDPOINTS) MUST reject unauthenticated requests with 401."""
+        EXPECTED_PUBLIC_ENDPOINTS = {
+            ("GET", "/api/status"),
+            ("GET", "/ui/ptt"),
+            ("POST", "/api/ptt/bootstrap"),
+        }
         tested_routes = 0
         for route in app.routes:
             if isinstance(route, Route):
                 for method in route.methods:
-                    if (method, route.path) == ("GET", "/api/status"):
+                    # Explicit protocol and method handling:
+                    # - OPTIONS is handled by CORSMiddleware per CORS specification.
+                    # - HEAD is automatically synthesized by Starlette for GET routes.
+                    if method in ("OPTIONS", "HEAD"):
+                        continue
+                    if (method, route.path) in EXPECTED_PUBLIC_ENDPOINTS:
                         continue
                     tested_routes += 1
                     
@@ -426,8 +449,10 @@ class TestBoundaryAuthInventory(unittest.TestCase):
 
         orig_sec = os.environ.get("AEONIX_SECRETS_DIR")
         orig_db = os.environ.get("AEONIX_DB_PATH")
+        orig_test = os.environ.get("AEONIX_TEST_MODE")
 
         try:
+            os.environ["AEONIX_TEST_MODE"] = "1"
             # Point to production secrets dir in test mode -> must raise PermissionError
             os.environ["AEONIX_SECRETS_DIR"] = PROD_SECRETS_DIR
             with self.assertRaises(PermissionError) as ctx_sec:
@@ -440,6 +465,10 @@ class TestBoundaryAuthInventory(unittest.TestCase):
                 get_db_path()
             self.assertIn("PRODUCTION_ACCESS_REFUSED_IN_TEST_MODE", str(ctx_db.exception))
         finally:
+            if orig_test is not None:
+                os.environ["AEONIX_TEST_MODE"] = orig_test
+            else:
+                os.environ.pop("AEONIX_TEST_MODE", None)
             if orig_sec is not None:
                 os.environ["AEONIX_SECRETS_DIR"] = orig_sec
             else:
