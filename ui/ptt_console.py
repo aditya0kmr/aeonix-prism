@@ -301,12 +301,137 @@ def get_ptt_console_html(api_token: str = "") -> str:
     }}
   }}
 
+  let mediaStream = null;
+  let audioCtx = null;
+  let scriptNode = null;
+  let sourceNode = null;
+  let capturedChunks = [];
+  let actualSampleRate = 16000;
+
+  function releaseMicHardware() {{
+    if (scriptNode) {{
+      try {{ scriptNode.disconnect(); }} catch(e) {{}}
+      scriptNode = null;
+    }}
+    if (sourceNode) {{
+      try {{ sourceNode.disconnect(); }} catch(e) {{}}
+      sourceNode = null;
+    }}
+    if (audioCtx) {{
+      try {{ audioCtx.close(); }} catch(e) {{}}
+      audioCtx = null;
+    }}
+    if (mediaStream) {{
+      try {{
+        mediaStream.getTracks().forEach(t => t.stop());
+      }} catch(e) {{}}
+      mediaStream = null;
+    }}
+  }}
+
+  function resampleTo16k(float32Audio, inputRate) {{
+    if (inputRate === 16000) return float32Audio;
+    const targetRate = 16000;
+    const ratio = inputRate / targetRate;
+    const newLength = Math.round(float32Audio.length / ratio);
+    const result = new Float32Array(newLength);
+    for (let i = 0; i < newLength; i++) {{
+      const srcIdx = i * ratio;
+      const idx = Math.floor(srcIdx);
+      const frac = srcIdx - idx;
+      const s0 = float32Audio[idx] || 0.0;
+      const s1 = float32Audio[idx + 1] || s0;
+      result[i] = (1.0 - frac) * s0 + frac * s1;
+    }}
+    return result;
+  }}
+
+  function encodeWav(samples, sampleRate) {{
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    function writeStr(offset, str) {{
+      for (let i = 0; i < str.length; i++) {{
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }}
+    }}
+    writeStr(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM format
+    view.setUint16(22, 1, true); // 1 channel (mono)
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true); // byte rate (sampleRate * 1 * 2)
+    view.setUint16(32, 2, true); // block align
+    view.setUint16(34, 16, true); // bits per sample (16)
+    writeStr(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) {{
+      view.setInt16(44 + i * 2, samples[i], true);
+    }}
+    return new Blob([view], {{ type: 'audio/wav' }});
+  }}
+
   async function startPtt() {{
     if (isRecording) return;
     noticeBanner.className = '';
     noticeBanner.style.display = 'none';
 
+    // 1. Secure context check
+    if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {{
+      showNotice('Browser security requires HTTPS for microphone access.', 'error');
+      stateText.textContent = 'INSECURE CONTEXT';
+      return;
+    }}
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {{
+      showNotice('getUserMedia is not supported by this browser.', 'error');
+      stateText.textContent = 'NO MIC SUPPORT';
+      return;
+    }}
+
     stateText.textContent = 'REQUESTING PERMISSION';
+
+    // 2. Request microphone stream strictly on explicit user gesture
+    try {{
+      mediaStream = await navigator.mediaDevices.getUserMedia({{
+        audio: {{
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true
+        }}
+      }});
+    }} catch (err) {{
+      showNotice('Microphone access denied or unavailable: ' + err.message, 'error');
+      stateText.textContent = 'PERMISSION DENIED';
+      releaseMicHardware();
+      return;
+    }}
+
+    // 3. Initialize AudioContext and capture node
+    try {{
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioCtxClass();
+      actualSampleRate = audioCtx.sampleRate;
+      sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+      scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+      capturedChunks = [];
+      scriptNode.onaudioprocess = (e) => {{
+        if (!isRecording) return;
+        const input = e.inputBuffer.getChannelData(0);
+        capturedChunks.push(new Float32Array(input));
+      }};
+      sourceNode.connect(scriptNode);
+      scriptNode.connect(audioCtx.destination);
+    }} catch (ctxErr) {{
+      showNotice('Failed to initialize audio capture: ' + ctxErr.message, 'error');
+      stateText.textContent = 'CAPTURE ERROR';
+      releaseMicHardware();
+      return;
+    }}
+
+    // 4. Notify server of PTT start
     const data = await apiCall('/api/ptt/start', 'POST');
     if (data.status === 'recording') {{
       isRecording = true;
@@ -318,12 +443,11 @@ def get_ptt_console_html(api_token: str = "") -> str:
       btnLabel.textContent = toggleCb.checked ? 'TAP TO STOP' : 'RECORDING...';
       stateText.textContent = 'RECORDING';
     }} else if (data.status === 'blocked_lockdown') {{
+      releaseMicHardware();
       showNotice(data.error || 'Sanctuary Lockdown is active.', 'error');
       stateText.textContent = 'LOCKDOWN';
-    }} else if (data.status === 'permission_denied') {{
-      showNotice(data.error || 'Microphone permission denied.', 'error');
-      stateText.textContent = 'PERMISSION DENIED';
     }} else {{
+      releaseMicHardware();
       showNotice(data.error || 'Unable to start recording.', 'error');
       stateText.textContent = 'IDLE';
     }}
@@ -343,14 +467,69 @@ def get_ptt_console_html(api_token: str = "") -> str:
     btnLabel.textContent = toggleCb.checked ? 'TAP TO SPEAK' : 'HOLD TO TALK';
     stateText.textContent = 'PROCESSING';
 
-    const data = await apiCall('/api/ptt/stop', 'POST', {{ reason }});
-    if (data.pipeline) {{
+    // 1. Immediately disconnect audio nodes and stop physical microphone tracks
+    const chunks = capturedChunks;
+    capturedChunks = [];
+    releaseMicHardware();
+
+    // 2. Process audio if captured
+    let wavBlob = null;
+    if (chunks.length > 0 && reason !== 'background' && reason !== 'cancel') {{
+      try {{
+        const totalSamples = chunks.reduce((acc, c) => acc + c.length, 0);
+        const flat = new Float32Array(totalSamples);
+        let offset = 0;
+        for (const c of chunks) {{
+          flat.set(c, offset);
+          offset += c.length;
+        }}
+        const resampled = resampleTo16k(flat, actualSampleRate);
+        const maxSamples = 15 * 16000;
+        const clamped = resampled.length > maxSamples ? resampled.subarray(0, maxSamples) : resampled;
+        const pcm16 = new Int16Array(clamped.length);
+        for (let i = 0; i < clamped.length; i++) {{
+          const s = Math.max(-1, Math.min(1, clamped[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }}
+        wavBlob = encodeWav(pcm16, 16000);
+      }} catch (encErr) {{
+        console.error('Audio encoding failed:', encErr);
+      }}
+    }}
+
+    let data;
+    if (wavBlob) {{
+      try {{
+        const stopUrl = '/api/ptt/stop?reason=' + encodeURIComponent(reason);
+        const headers = {{
+          'Content-Type': 'audio/wav',
+          'X-Audio-Sample-Rate': '16000',
+          'X-Audio-Channels': '1'
+        }};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const response = await fetch(stopUrl, {{
+          method: 'POST',
+          headers: headers,
+          body: wavBlob
+        }});
+        data = await response.json();
+      }} catch (netErr) {{
+        data = {{ error: netErr.message }};
+      }}
+    }} else {{
+      data = await apiCall('/api/ptt/stop', 'POST', {{ reason }});
+    }}
+
+    if (data && data.pipeline) {{
       const p = data.pipeline;
       stateText.textContent = p.status.toUpperCase();
       speechCard.textContent = p.speech || '[No speech response]';
       if (p.requires_sentinel_approval) {{
         showNotice('Consequential action held at Sentinel Gate. Authorization required below.', 'info');
       }}
+    }} else if (data && data.error) {{
+      showNotice(data.error, 'error');
+      stateText.textContent = 'ERROR';
     }} else {{
       stateText.textContent = 'IDLE';
     }}

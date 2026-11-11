@@ -1,0 +1,98 @@
+{
+  "artifact_type": "physical_end_to_end_voice_loop_evidence",
+  "milestone": "P1-2",
+  "evaluation_date": "2026-11-11",
+  "status": "PHYSICAL_END_TO_END_VOICE_LOOP_PASSED",
+  "production_readiness": "NOT_FINALIZED",
+  "evaluation_scope": "bounded_demonstration_only",
+  "general_speech_reliability_claim": "NONE (bounded keyword intent demonstration only; not a claim of general free-form speech reliability)",
+  "input": {
+    "capture_method": "POCO browser WebAudio PTT console (/ui/ptt)",
+    "lifecycle": "Explicit user gesture touchstart/touchend with immediate hardware release",
+    "disk_retention": "ZERO (RAM only; temp buffer unlinked immediately upon STT completion)",
+    "duration_seconds": 7.168,
+    "sample_rate_hz": 16000,
+    "channels": 1,
+    "sample_width_bytes": 2,
+    "encoding": "pcm_s16le",
+    "pcm_bytes": 229376,
+    "total_wav_bytes": 229420,
+    "sha256": "c2fc8c413c78f56201bce0f571bac21b537b5eb3dd97f2cb291ce386a8135125"
+  },
+  "speech_to_text": {
+    "engine": "whisper.cpp (Dimensity 810 ARM NEON)",
+    "model": "ggml-tiny.bin",
+    "stt_duration_seconds": 2.247,
+    "vad_rms_energy": 3219.66,
+    "vad_has_speech": true,
+    "expected_command": "What is the system status?",
+    "raw_transcript": "what is the system of status?",
+    "normalized_transcript": "what is the system of status",
+    "transcript_disclaimer": "Whisper produced 'what is the system of status?' containing an extraneous preposition 'of' during inter-word pause. Word order from Attempt 1 ('what the system is status') was corrected."
+  },
+  "intent_resolution": {
+    "method": "explicit_deterministic_intent_matching",
+    "matched_intent": "system_health",
+    "matching_evidence": "Recognized keywords 'system' and 'status' present in utterance",
+    "mismatch_detail": "Extraneous word 'of' between 'system' and 'status'",
+    "fast_path_duration_ms": 0.03,
+    "deterministic_response_text": "Living surface online. The phone and television are connected.",
+    "llm_used": false
+  },
+  "tts_synthesis": {
+    "profile_name": "en_IN-spicor-medium",
+    "model_file": "en_IN-spicor-medium-sherpa.onnx",
+    "model_sha256": "84732bfb9668b20f31c28e7fecf33c93498dbcbaac5c50069d8754a04b5ed4a7",
+    "tokens_sha256": "e8a50ae0c75612d18cfcf3f90800dca79f961e3ed97f9574f3535194469187fd",
+    "settings": {
+      "speed": 0.90,
+      "silence_scale": 0.20,
+      "noise_scale": 0.667,
+      "noise_scale_w": 0.800,
+      "length_scale": 1.0,
+      "threads": 2
+    },
+    "timings": {
+      "phonemization_seconds": 0.203,
+      "model_load_seconds": 3.354,
+      "neural_synthesis_seconds": 0.912,
+      "serialization_seconds": 0.016
+    },
+    "output_audio": {
+      "sample_rate_hz": 22050,
+      "channels": 1,
+      "sample_width_bytes": 2,
+      "duration_seconds": 4.145,
+      "pcm_bytes": 182784,
+      "total_wav_bytes": 182828,
+      "sha256": "cbbbfe38712fd6156b77e1ec9d4d906e37430e52bb952934a58d1553faf21b9a"
+    }
+  },
+  "fire_tv_transport_and_playback": {
+    "protocol": "VoiceAudioProtocol v1 over authenticated TLS WebSocket",
+    "message_id": "physical-ptt-attempt2-intent-match-firetv",
+    "chunk_size_bytes": 16384,
+    "total_pcm_bytes_streamed": 182784,
+    "websocket_tx_seconds": 0.00363,
+    "playback_sink": "AndroidAudioTrackSink (STREAM_MUSIC, 22050Hz, AudioFormat.ENCODING_PCM_16BIT)",
+    "audio_drain_window_seconds": 5.34,
+    "human_listening_verdict": "PASS — “The audio was good and perfect.”"
+  },
+  "memory_audit": {
+    "vm_rss_start_mb": 48.26,
+    "vm_rss_post_tts_mb": 233.11,
+    "vm_rss_post_drain_mb": 235.78,
+    "physical_ram_delta_mb": 187.52,
+    "mem_available_baseline_mb": 1810.71,
+    "mem_available_final_mb": 1694.36,
+    "ram_guard_respected": true,
+    "ru_maxrss_static_baseline_mb": 1024.85,
+    "ru_maxrss_explanation": "Android Bionic dynamic linker / page-table static preallocation reported identically at process launch; actual resident set size tracked via /proc/self/status VmRSS"
+  },
+  "server_lifecycle": {
+    "bind_address": "<AEONIX_LAN_IP>:8443",
+    "tls_enforced": true,
+    "shutdown_trigger": "Immediate upon playback drain completion",
+    "port_8443_final_status": "CLOSED"
+  }
+}

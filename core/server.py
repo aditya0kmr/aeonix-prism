@@ -597,19 +597,86 @@ async def post_api_ptt_start(request):
     res = _ptt_controller.start_recording(actor=actor)
     return JSONResponse(res)
 
+def validate_browser_wav_payload(payload: bytes) -> Tuple[bool, str, bytes]:
+    """
+    Validates browser-uploaded WAV audio according to strict contract:
+    - Must be valid RIFF WAVE format.
+    - Format tag must be 1 (PCM).
+    - Channels must be 1 (mono).
+    - Bits per sample must be 16.
+    - Sample rate must be 16000 Hz.
+    - Duration <= 15.0 seconds (<= 480,000 bytes PCM).
+    - Payload cannot be empty.
+    Returns (is_valid, error_message, pcm_bytes).
+    """
+    if not payload:
+        return False, "EMPTY_AUDIO: Audio payload is empty", b""
+
+    # Hard ceiling: 480,000 bytes PCM + 4096 bytes header margin
+    if len(payload) > 480000 + 4096:
+        return False, "PAYLOAD_TOO_LARGE: Audio payload exceeds 480,000 bytes limit (15-second ceiling)", b""
+
+    try:
+        import io, wave
+        with wave.open(io.BytesIO(payload), "rb") as w:
+            channels = w.getnchannels()
+            sampwidth = w.getsampwidth()
+            framerate = w.getframerate()
+            nframes = w.getnframes()
+            pcm_bytes = w.readframes(nframes)
+    except Exception as e:
+        return False, f"MALFORMED_WAV_HEADER: {str(e)}", b""
+
+    if channels != 1:
+        return False, f"UNSUPPORTED_CHANNELS: Expected mono (1 channel), got {channels}", b""
+    if sampwidth != 2:
+        return False, f"UNSUPPORTED_BIT_DEPTH: Expected 16-bit PCM (2 bytes), got {sampwidth * 8}-bit", b""
+    if framerate != 16000:
+        return False, f"UNSUPPORTED_SAMPLE_RATE: Expected 16000 Hz, got {framerate} Hz", b""
+    if len(pcm_bytes) == 0:
+        return False, "EMPTY_AUDIO: Audio payload contains 0 frames", b""
+    if len(pcm_bytes) > 480000:
+        return False, f"EXCESSIVE_DURATION: Audio length {len(pcm_bytes)} bytes exceeds 15-second ceiling (480000 bytes)", b""
+
+    return True, "", pcm_bytes
+
 async def post_api_ptt_stop(request):
     """Stops PTT recording, retrieves ephemeral audio, and runs voice intent pipeline."""
     auth_role, caller = get_request_identity(request)
     actor = caller if auth_role != "UNAUTHENTICATED" else "Aadi"
 
-    body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
-    reason = body.get("reason", "release")
-    allow_fallback = bool(body.get("allow_fallback", False))
-    model_tier = body.get("model_tier", "0.5B")
+    content_type = request.headers.get("content-type", "").lower()
+    reason = request.query_params.get("reason") or request.headers.get("X-Audio-Reason") or "release"
+    allow_fallback = (request.query_params.get("allow_fallback", "false").lower() == "true")
+    model_tier = request.query_params.get("model_tier") or request.headers.get("X-Model-Tier") or "0.5B"
 
-    stop_res = _ptt_controller.stop_recording(reason=reason, actor=actor)
-    audio_bytes = _ptt_controller.get_audio_buffer()
-    _ptt_controller.clear_buffer()
+    audio_bytes = b""
+    stop_res: Dict[str, Any] = {}
+
+    if "audio/wav" in content_type or "application/octet-stream" in content_type:
+        raw_body = await request.body()
+        ok, err, pcm_bytes = validate_browser_wav_payload(raw_body)
+        if not ok:
+            return JSONResponse({"error": err}, status_code=400)
+        
+        audio_bytes = pcm_bytes
+        stop_res = {
+            "status": "stopped",
+            "reason": reason,
+            "duration_s": round(len(pcm_bytes) / 32000.0, 3),
+            "audio_bytes_length": len(pcm_bytes),
+            "recording_indicator": False,
+            "source": "browser_mic"
+        }
+    else:
+        body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        reason = body.get("reason", reason)
+        allow_fallback = bool(body.get("allow_fallback", allow_fallback))
+        model_tier = body.get("model_tier", model_tier)
+
+        stop_res = _ptt_controller.stop_recording(reason=reason, actor=actor)
+        audio_bytes = _ptt_controller.get_audio_buffer()
+        _ptt_controller.clear_buffer()
 
     if not audio_bytes:
         return JSONResponse({
@@ -620,28 +687,31 @@ async def post_api_ptt_stop(request):
             }
         })
 
-    pipeline_res = process_voice_pipeline(
-        audio_bytes=audio_bytes,
-        actor=actor,
-        model_tier=model_tier,
-        allow_fallback=allow_fallback,
-        db_path=os.environ.get("AEONIX_DB_PATH")
-    )
+    try:
+        pipeline_res = process_voice_pipeline(
+            audio_bytes=audio_bytes,
+            actor=actor,
+            model_tier=model_tier,
+            allow_fallback=allow_fallback,
+            db_path=os.environ.get("AEONIX_DB_PATH")
+        )
 
-    return JSONResponse({
-        **stop_res,
-        "pipeline": {
-            "success": pipeline_res.success,
-            "status": pipeline_res.status,
-            "speech": pipeline_res.speech,
-            "action": pipeline_res.action,
-            "tier": pipeline_res.tier,
-            "model_used": pipeline_res.model_used,
-            "fallback_applied": pipeline_res.fallback_applied,
-            "requires_sentinel_approval": pipeline_res.requires_sentinel_approval,
-            "latency_ms": pipeline_res.latency_ms
-        }
-    })
+        return JSONResponse({
+            **stop_res,
+            "pipeline": {
+                "success": pipeline_res.success,
+                "status": pipeline_res.status,
+                "speech": pipeline_res.speech,
+                "action": pipeline_res.action,
+                "tier": pipeline_res.tier,
+                "model_used": pipeline_res.model_used,
+                "fallback_applied": pipeline_res.fallback_applied,
+                "requires_sentinel_approval": pipeline_res.requires_sentinel_approval,
+                "latency_ms": pipeline_res.latency_ms
+            }
+        })
+    finally:
+        audio_bytes = b""
 
 async def get_api_ptt_status(request):
     """Returns combined status of PTT, model runner, queue, and connected glass terminals."""
