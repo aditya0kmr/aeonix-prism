@@ -131,6 +131,9 @@ class AadyaCrownZero:
         self.missions = None
         self.missions_initialization_status = "PENDING"
         self.missions_initialization_error = None
+        self.learning = None
+        self.learning_initialization_status = "PENDING"
+        self.learning_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -235,6 +238,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_learning import AadyaLearningEngine
+                self.learning = AadyaLearningEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.learning_initialization_status = "INITIALIZED"
+                self.learning_initialization_error = None
+            except Exception as le:
+                self.learning = None
+                self.learning_initialization_status = "INITIALIZATION_FAILED"
+                self.learning_initialization_error = str(le)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="LEARNING_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_learning_engine",
+                        result="DEGRADED",
+                        details={"error": str(le)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -246,6 +270,9 @@ class AadyaCrownZero:
             self.missions = None
             self.missions_initialization_status = "INITIALIZATION_FAILED"
             self.missions_initialization_error = str(e)
+            self.learning = None
+            self.learning_initialization_status = "INITIALIZATION_FAILED"
+            self.learning_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -282,6 +309,14 @@ class AadyaCrownZero:
         if not self.missions or self.missions_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Missions Engine is unavailable (status: {self.missions_initialization_status}, error: {self.missions_initialization_error})"
+            )
+
+    def _check_learning_availability(self) -> None:
+        """Validates database and learning engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.learning or self.learning_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Learning Engine is unavailable (status: {self.learning_initialization_status}, error: {self.learning_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1242,6 +1277,69 @@ class AadyaCrownZero:
     def recover_mission_from_snapshot(self, *args, **kwargs):
         self._check_missions_availability()
         return self.missions.recover_mission_from_snapshot(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 4 LEARNING, REFLECTION & SELF-IMPROVEMENT FORWARDERS
+    # -------------------------------------------------------------------------
+    def record_mission_reflection(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.record_mission_reflection(*args, **kwargs)
+
+    def get_mission_reflection(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.get_mission_reflection(*args, **kwargs)
+
+    def record_operator_feedback(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.record_operator_feedback(*args, **kwargs)
+
+    def list_operator_feedback(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.list_operator_feedback(*args, **kwargs)
+
+    def analyze_recent_outcomes(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.analyze_recent_outcomes(*args, **kwargs)
+
+    def adapt_preference(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.adapt_preference(*args, **kwargs)
+
+    def get_learned_preference(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.get_learned_preference(*args, **kwargs)
+
+    def list_learned_preferences(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.list_learned_preferences(*args, **kwargs)
+
+    def calibrate_confidence(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.calibrate_confidence(*args, **kwargs)
+
+    def detect_operational_patterns(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.detect_operational_patterns(*args, **kwargs)
+
+    def propose_improvement(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.propose_improvement(*args, **kwargs)
+
+    def get_improvement_proposal(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.get_improvement_proposal(*args, **kwargs)
+
+    def list_improvement_proposals(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.list_improvement_proposals(*args, **kwargs)
+
+    def adopt_improvement_proposal(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.adopt_improvement_proposal(*args, **kwargs)
+
+    def reject_improvement_proposal(self, *args, **kwargs):
+        self._check_learning_availability()
+        return self.learning.reject_improvement_proposal(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
