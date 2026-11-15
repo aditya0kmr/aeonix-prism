@@ -128,6 +128,9 @@ class AadyaCrownZero:
         self.context = None
         self.context_initialization_status = "PENDING"
         self.context_initialization_error = None
+        self.missions = None
+        self.missions_initialization_status = "PENDING"
+        self.missions_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -211,6 +214,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_missions import AadyaMissionEngine
+                self.missions = AadyaMissionEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.missions_initialization_status = "INITIALIZED"
+                self.missions_initialization_error = None
+            except Exception as me:
+                self.missions = None
+                self.missions_initialization_status = "INITIALIZATION_FAILED"
+                self.missions_initialization_error = str(me)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="MISSION_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_missions_engine",
+                        result="DEGRADED",
+                        details={"error": str(me)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -219,6 +243,9 @@ class AadyaCrownZero:
             self.context = None
             self.context_initialization_status = "INITIALIZATION_FAILED"
             self.context_initialization_error = str(e)
+            self.missions = None
+            self.missions_initialization_status = "INITIALIZATION_FAILED"
+            self.missions_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -247,6 +274,14 @@ class AadyaCrownZero:
         if not self.context or self.context_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Context Engine is unavailable (status: {self.context_initialization_status}, error: {self.context_initialization_error})"
+            )
+
+    def _check_missions_availability(self) -> None:
+        """Validates database and missions engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.missions or self.missions_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Missions Engine is unavailable (status: {self.missions_initialization_status}, error: {self.missions_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1160,6 +1195,53 @@ class AadyaCrownZero:
     def synthesize_unified_timeline(self, *args, **kwargs):
         self._check_context_availability()
         return self.context.synthesize_unified_timeline(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 3 AUTONOMOUS OPERATIONS & MISSION ENGINE FORWARDERS
+    # -------------------------------------------------------------------------
+    def create_mission(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.create_mission(*args, **kwargs)
+
+    def get_mission(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.get_mission(*args, **kwargs)
+
+    def list_missions(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.list_missions(*args, **kwargs)
+
+    def execute_mission_step(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.execute_mission_step(*args, **kwargs)
+
+    def run_mission_to_completion(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.run_mission_to_completion(*args, **kwargs)
+
+    def pause_mission(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.pause_mission(*args, **kwargs)
+
+    def resume_mission(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.resume_mission(*args, **kwargs)
+
+    def cancel_mission(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.cancel_mission(*args, **kwargs)
+
+    def retry_failed_task(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.retry_failed_task(*args, **kwargs)
+
+    def create_mission_recovery_snapshot(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.create_mission_recovery_snapshot(*args, **kwargs)
+
+    def recover_mission_from_snapshot(self, *args, **kwargs):
+        self._check_missions_availability()
+        return self.missions.recover_mission_from_snapshot(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
