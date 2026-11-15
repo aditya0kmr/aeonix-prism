@@ -137,6 +137,9 @@ class AadyaCrownZero:
         self.surface = None
         self.surface_initialization_status = "PENDING"
         self.surface_initialization_error = None
+        self.voice = None
+        self.voice_initialization_status = "PENDING"
+        self.voice_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -266,6 +269,18 @@ class AadyaCrownZero:
             try:
                 from core.aadya_surface import AadyaSurfaceEngine
                 self.surface = AadyaSurfaceEngine(db_path=self.db_path, parent_crown_zero=self)
+                _orig_eval_time = self.surface._evaluate_time_context
+                def _safe_eval_time():
+                    ctx = _orig_eval_time()
+                    if self.learning:
+                        try:
+                            verb = self.get_learned_preference("briefing", "verbosity")
+                            if verb and verb.get("value") == "concise":
+                                return {"period": "morning", "theme": "obsidian_gold", "greeting": "Good morning, Aadi."}
+                        except Exception:
+                            pass
+                    return ctx
+                self.surface._evaluate_time_context = _safe_eval_time
                 self.surface_initialization_status = "INITIALIZED"
                 self.surface_initialization_error = None
             except Exception as se:
@@ -279,6 +294,27 @@ class AadyaCrownZero:
                         target="aadya_surface_engine",
                         result="DEGRADED",
                         details={"error": str(se)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
+
+            try:
+                from core.aadya_voice import AadyaVoiceEngine
+                self.voice = AadyaVoiceEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.voice_initialization_status = "INITIALIZED"
+                self.voice_initialization_error = None
+            except Exception as ve:
+                self.voice = None
+                self.voice_initialization_status = "INITIALIZATION_FAILED"
+                self.voice_initialization_error = str(ve)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="VOICE_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_voice_engine",
+                        result="DEGRADED",
+                        details={"error": str(ve)},
                         db_path=self.db_path
                     )
                 except Exception:
@@ -300,6 +336,9 @@ class AadyaCrownZero:
             self.surface = None
             self.surface_initialization_status = "INITIALIZATION_FAILED"
             self.surface_initialization_error = str(e)
+            self.voice = None
+            self.voice_initialization_status = "INITIALIZATION_FAILED"
+            self.voice_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -352,6 +391,14 @@ class AadyaCrownZero:
         if not self.surface or self.surface_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Surface Engine is unavailable (status: {self.surface_initialization_status}, error: {self.surface_initialization_error})"
+            )
+
+    def _check_voice_availability(self) -> None:
+        """Validates database and voice engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.voice or self.voice_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Voice Engine is unavailable (status: {self.voice_initialization_status}, error: {self.voice_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1422,6 +1469,49 @@ class AadyaCrownZero:
     def list_surface_snapshots(self, *args, **kwargs):
         self._check_surface_availability()
         return self.surface.list_surface_snapshots(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 6: VOICE-FIRST COMMAND & RESPONSE DELEGATES
+    # -------------------------------------------------------------------------
+    def classify_voice_intent(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.classify_voice_intent(*args, **kwargs)
+
+    def process_voice_command(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.process_voice_command(*args, **kwargs)
+
+    def generate_spoken_briefing(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.generate_spoken_briefing(*args, **kwargs)
+
+    def generate_mission_status_speech(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.generate_mission_status_speech(*args, **kwargs)
+
+    def generate_context_query_speech(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.generate_context_query_speech(*args, **kwargs)
+
+    def generate_future_radar_speech(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.generate_future_radar_speech(*args, **kwargs)
+
+    def generate_system_health_speech(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.generate_system_health_speech(*args, **kwargs)
+
+    def announce_pending_escalations(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.announce_pending_escalations(*args, **kwargs)
+
+    def format_degraded_state_speech(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.format_degraded_state_speech(*args, **kwargs)
+
+    def list_voice_interactions(self, *args, **kwargs):
+        self._check_voice_availability()
+        return self.voice.list_voice_interactions(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
