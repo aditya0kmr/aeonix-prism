@@ -125,6 +125,9 @@ class AadyaCrownZero:
         self.initialization_status = "PENDING_INITIALIZATION"
         self.init_error = None
         self.audit_log_available = False
+        self.context = None
+        self.context_initialization_status = "PENDING"
+        self.context_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -187,11 +190,35 @@ class AadyaCrownZero:
             self.initialization_status = "INITIALIZED"
             self.init_error = None
             self.audit_log_available = True
+
+            try:
+                from core.aadya_context import AadyaContextEngine
+                self.context = AadyaContextEngine(db_path=self.db_path, aadya_core=self)
+                self.context_initialization_status = "INITIALIZED"
+                self.context_initialization_error = None
+            except Exception as ce:
+                self.context = None
+                self.context_initialization_status = "INITIALIZATION_FAILED"
+                self.context_initialization_error = str(ce)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="CONTEXT_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_context_engine",
+                        result="DEGRADED",
+                        details={"error": str(ce)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
             self.init_error = str(e)
             self.audit_log_available = False
+            self.context = None
+            self.context_initialization_status = "INITIALIZATION_FAILED"
+            self.context_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -212,6 +239,14 @@ class AadyaCrownZero:
         if not self.is_initialized:
             raise RuntimeError(
                 f"AADYA is in degraded state: {self.initialization_status}. Root cause: {self.init_error}"
+            )
+
+    def _check_context_availability(self) -> None:
+        """Validates database and context engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.context or self.context_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Context Engine is unavailable (status: {self.context_initialization_status}, error: {self.context_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1078,6 +1113,53 @@ class AadyaCrownZero:
             "recovery_snapshot_id": row[4],
             "reason": reason
         }
+
+    # -------------------------------------------------------------------------
+    # 7. STAGE 2: MEMORY & CONTEXT ENGINE BRIDGE
+    # -------------------------------------------------------------------------
+    def add_memory_node(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.add_memory_node(*args, **kwargs)
+
+    def get_memory_node(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.get_memory_node(*args, **kwargs)
+
+    def list_active_nodes(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.list_active_nodes(*args, **kwargs)
+
+    def correct_memory_node(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.correct_memory_node(*args, **kwargs)
+
+    def deprecate_memory_node(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.deprecate_memory_node(*args, **kwargs)
+
+    def delete_memory_node(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.delete_memory_node(*args, **kwargs)
+
+    def add_context_relation(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.add_context_relation(*args, **kwargs)
+
+    def promote_to_global_nexus(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.promote_to_global_nexus(*args, **kwargs)
+
+    def wrap_external_context(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.wrap_external_context(*args, **kwargs)
+
+    def sanitize_for_tv_export(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.sanitize_for_tv_export(*args, **kwargs)
+
+    def synthesize_unified_timeline(self, *args, **kwargs):
+        self._check_context_availability()
+        return self.context.synthesize_unified_timeline(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
