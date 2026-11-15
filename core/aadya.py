@@ -134,6 +134,9 @@ class AadyaCrownZero:
         self.learning = None
         self.learning_initialization_status = "PENDING"
         self.learning_initialization_error = None
+        self.surface = None
+        self.surface_initialization_status = "PENDING"
+        self.surface_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -259,6 +262,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_surface import AadyaSurfaceEngine
+                self.surface = AadyaSurfaceEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.surface_initialization_status = "INITIALIZED"
+                self.surface_initialization_error = None
+            except Exception as se:
+                self.surface = None
+                self.surface_initialization_status = "INITIALIZATION_FAILED"
+                self.surface_initialization_error = str(se)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="SURFACE_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_surface_engine",
+                        result="DEGRADED",
+                        details={"error": str(se)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -273,6 +297,9 @@ class AadyaCrownZero:
             self.learning = None
             self.learning_initialization_status = "INITIALIZATION_FAILED"
             self.learning_initialization_error = str(e)
+            self.surface = None
+            self.surface_initialization_status = "INITIALIZATION_FAILED"
+            self.surface_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -317,6 +344,14 @@ class AadyaCrownZero:
         if not self.learning or self.learning_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Learning Engine is unavailable (status: {self.learning_initialization_status}, error: {self.learning_initialization_error})"
+            )
+
+    def _check_surface_availability(self) -> None:
+        """Validates database and surface engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.surface or self.surface_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Surface Engine is unavailable (status: {self.surface_initialization_status}, error: {self.surface_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1340,6 +1375,53 @@ class AadyaCrownZero:
     def reject_improvement_proposal(self, *args, **kwargs):
         self._check_learning_availability()
         return self.learning.reject_improvement_proposal(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 5: ADAPTIVE INTERFACE & LIVING SURFACE DELEGATES
+    # -------------------------------------------------------------------------
+    def render_living_surface(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.render_living_surface(*args, **kwargs)
+
+    def generate_adaptive_briefing(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.generate_adaptive_briefing(*args, **kwargs)
+
+    def render_tv_context_cards(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.render_tv_context_cards(*args, **kwargs)
+
+    def render_mission_progress_cards(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.render_mission_progress_cards(*args, **kwargs)
+
+    def render_future_radar_card(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.render_future_radar_card(*args, **kwargs)
+
+    def render_poco_escalation_queue_card(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.render_poco_escalation_queue_card(*args, **kwargs)
+
+    def render_system_health_card(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.render_system_health_card(*args, **kwargs)
+
+    def capture_operator_feedback_from_surface(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.capture_operator_feedback_from_surface(*args, **kwargs)
+
+    def create_surface_snapshot(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.create_surface_snapshot(*args, **kwargs)
+
+    def get_surface_snapshot(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.get_surface_snapshot(*args, **kwargs)
+
+    def list_surface_snapshots(self, *args, **kwargs):
+        self._check_surface_availability()
+        return self.surface.list_surface_snapshots(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
