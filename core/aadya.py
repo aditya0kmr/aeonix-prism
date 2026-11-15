@@ -140,6 +140,9 @@ class AadyaCrownZero:
         self.voice = None
         self.voice_initialization_status = "PENDING"
         self.voice_initialization_error = None
+        self.readiness = None
+        self.readiness_initialization_status = "PENDING"
+        self.readiness_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -319,6 +322,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_readiness import AadyaReadinessEngine
+                self.readiness = AadyaReadinessEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.readiness_initialization_status = "INITIALIZED"
+                self.readiness_initialization_error = None
+            except Exception as re:
+                self.readiness = None
+                self.readiness_initialization_status = "INITIALIZATION_FAILED"
+                self.readiness_initialization_error = str(re)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="READINESS_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_readiness_engine",
+                        result="DEGRADED",
+                        details={"error": str(re)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -339,6 +363,9 @@ class AadyaCrownZero:
             self.voice = None
             self.voice_initialization_status = "INITIALIZATION_FAILED"
             self.voice_initialization_error = str(e)
+            self.readiness = None
+            self.readiness_initialization_status = "INITIALIZATION_FAILED"
+            self.readiness_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -399,6 +426,14 @@ class AadyaCrownZero:
         if not self.voice or self.voice_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Voice Engine is unavailable (status: {self.voice_initialization_status}, error: {self.voice_initialization_error})"
+            )
+
+    def _check_readiness_availability(self) -> None:
+        """Validates database and readiness engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.readiness or self.readiness_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Readiness Engine is unavailable (status: {self.readiness_initialization_status}, error: {self.readiness_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1512,6 +1547,25 @@ class AadyaCrownZero:
     def list_voice_interactions(self, *args, **kwargs):
         self._check_voice_availability()
         return self.voice.list_voice_interactions(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 7: OPERATIONAL READINESS & PIPELINE DELEGATES
+    # -------------------------------------------------------------------------
+    def evaluate_operational_readiness(self, *args, **kwargs):
+        self._check_readiness_availability()
+        return self.readiness.evaluate_operational_readiness(*args, **kwargs)
+
+    def record_readiness_assessment(self, *args, **kwargs):
+        self._check_readiness_availability()
+        return self.readiness.record_readiness_assessment(*args, **kwargs)
+
+    def list_readiness_assessments(self, *args, **kwargs):
+        self._check_readiness_availability()
+        return self.readiness.list_readiness_assessments(*args, **kwargs)
+
+    def run_end_to_end_voice_turn(self, *args, **kwargs):
+        self._check_readiness_availability()
+        return self.readiness.run_end_to_end_voice_turn(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
