@@ -149,6 +149,9 @@ class AadyaCrownZero:
         self.operator = None
         self.operator_initialization_status = "PENDING"
         self.operator_initialization_error = None
+        self.activation = None
+        self.activation_initialization_status = "PENDING"
+        self.activation_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -431,6 +434,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_activation import AadyaActivationEngine
+                self.activation = AadyaActivationEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.activation_initialization_status = "INITIALIZED"
+                self.activation_initialization_error = None
+            except Exception as ate:
+                self.activation = None
+                self.activation_initialization_status = "INITIALIZATION_FAILED"
+                self.activation_initialization_error = str(ate)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="ACTIVATION_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_activation_engine",
+                        result="DEGRADED",
+                        details={"error": str(ate)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -460,6 +484,9 @@ class AadyaCrownZero:
             self.operator = None
             self.operator_initialization_status = "INITIALIZATION_FAILED"
             self.operator_initialization_error = str(e)
+            self.activation = None
+            self.activation_initialization_status = "INITIALIZATION_FAILED"
+            self.activation_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -544,6 +571,14 @@ class AadyaCrownZero:
         if not self.operator or self.operator_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Operator Engine is unavailable (status: {self.operator_initialization_status}, error: {self.operator_initialization_error})"
+            )
+
+    def _check_activation_availability(self) -> None:
+        """Validates database and activation engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.activation or self.activation_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Activation Engine is unavailable (status: {self.activation_initialization_status}, error: {self.activation_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1758,6 +1793,49 @@ class AadyaCrownZero:
     def persist_operator_readiness_report(self, *args, **kwargs):
         self._check_operator_availability()
         return self.operator.persist_operator_readiness_report(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 10: CONTROLLED LOCAL RUNTIME ACTIVATION & OPERATOR HANDOFF DELEGATES
+    # -------------------------------------------------------------------------
+    def generate_operator_activation_checklist(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.generate_operator_activation_checklist(*args, **kwargs)
+
+    def render_operator_readiness_dashboard(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.render_operator_readiness_dashboard(*args, **kwargs)
+
+    def validate_runtime_smoke_pipeline(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.validate_runtime_smoke_pipeline(*args, **kwargs)
+
+    def verify_runtime_voice_concurrency(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.verify_runtime_voice_concurrency(*args, **kwargs)
+
+    def validate_surface_runtime_readiness(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.validate_surface_runtime_readiness(*args, **kwargs)
+
+    def validate_poco_gate_readiness(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.validate_poco_gate_readiness(*args, **kwargs)
+
+    def verify_audit_and_hardware_guards(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.verify_audit_and_hardware_guards(*args, **kwargs)
+
+    def execute_controlled_rollback_dry_run(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.execute_controlled_rollback_dry_run(*args, **kwargs)
+
+    def generate_operator_handoff_report(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.generate_operator_handoff_report(*args, **kwargs)
+
+    def persist_operator_handoff_report(self, *args, **kwargs):
+        self._check_activation_availability()
+        return self.activation.persist_operator_handoff_report(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
