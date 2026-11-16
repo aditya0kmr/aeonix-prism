@@ -155,6 +155,9 @@ class AadyaCrownZero:
         self.startup = None
         self.startup_initialization_status = "PENDING"
         self.startup_initialization_error = None
+        self.console = None
+        self.console_initialization_status = "PENDING"
+        self.console_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -479,6 +482,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_console import AadyaConsoleEngine
+                self.console = AadyaConsoleEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.console_initialization_status = "INITIALIZED"
+                self.console_initialization_error = None
+            except Exception as cse:
+                self.console = None
+                self.console_initialization_status = "INITIALIZATION_FAILED"
+                self.console_initialization_error = str(cse)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="CONSOLE_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_console_engine",
+                        result="DEGRADED",
+                        details={"error": str(cse)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -514,6 +538,9 @@ class AadyaCrownZero:
             self.startup = None
             self.startup_initialization_status = "INITIALIZATION_FAILED"
             self.startup_initialization_error = str(e)
+            self.console = None
+            self.console_initialization_status = "INITIALIZATION_FAILED"
+            self.console_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -614,6 +641,14 @@ class AadyaCrownZero:
         if not self.startup or self.startup_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Startup Engine is unavailable (status: {self.startup_initialization_status}, error: {self.startup_initialization_error})"
+            )
+
+    def _check_console_availability(self) -> None:
+        """Validates database and console engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.console or self.console_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Console Engine is unavailable (status: {self.console_initialization_status}, error: {self.console_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1900,16 +1935,37 @@ class AadyaCrownZero:
         return self.startup.validate_poco_escalation_readiness(*args, **kwargs)
 
     def generate_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 12 or kwargs.get("target_stage") == 12:
+            self._check_console_availability()
+            return self.console.generate_operator_activation_report(*args, **kwargs)
         self._check_startup_availability()
         return self.startup.generate_operator_activation_report(*args, **kwargs)
 
     def persist_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 12 or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("report_version") == "AADYA_STAGE12_V1"):
+            self._check_console_availability()
+            return self.console.persist_operator_activation_report(*args, **kwargs)
         self._check_startup_availability()
         return self.startup.persist_operator_activation_report(*args, **kwargs)
 
     def execute_startup_rollback_dry_run(self, *args, **kwargs):
         self._check_startup_availability()
         return self.startup.execute_controlled_rollback_dry_run(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 12: CONTROLLED LOCAL SERVICE ACTIVATION & OPERATOR CONSOLE READINESS
+    # -------------------------------------------------------------------------
+    def activate_controlled_local_service(self, *args, **kwargs):
+        self._check_console_availability()
+        return self.console.activate_controlled_local_service(*args, **kwargs)
+
+    def validate_operator_console_readiness(self, *args, **kwargs):
+        self._check_console_availability()
+        return self.console.validate_operator_console_readiness(*args, **kwargs)
+
+    def execute_console_rollback_dry_run(self, *args, **kwargs):
+        self._check_console_availability()
+        return self.console.execute_controlled_rollback_dry_run(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
