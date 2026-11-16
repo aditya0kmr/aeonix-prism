@@ -143,6 +143,9 @@ class AadyaCrownZero:
         self.readiness = None
         self.readiness_initialization_status = "PENDING"
         self.readiness_initialization_error = None
+        self.deployment = None
+        self.deployment_initialization_status = "PENDING"
+        self.deployment_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -284,6 +287,20 @@ class AadyaCrownZero:
                             pass
                     return ctx
                 self.surface._evaluate_time_context = _safe_eval_time
+
+                _orig_snap = self.surface.create_surface_snapshot
+                def _safe_create_surface_snapshot():
+                    now = time.time()
+                    if (now - self.surface._last_snapshot_time) < 5.0:
+                        from core.aadya_surface import DegradedStateError
+                        raise DegradedStateError(
+                            "Snapshot creation rate-limited. Please wait 5.0s between snapshots."
+                        )
+                    snap = _orig_snap()
+                    self.surface._last_snapshot_time = time.time()
+                    return snap
+                self.surface.create_surface_snapshot = _safe_create_surface_snapshot
+
                 self.surface_initialization_status = "INITIALIZED"
                 self.surface_initialization_error = None
             except Exception as se:
@@ -305,6 +322,32 @@ class AadyaCrownZero:
             try:
                 from core.aadya_voice import AadyaVoiceEngine
                 self.voice = AadyaVoiceEngine(db_path=self.db_path, parent_crown_zero=self)
+                _active_voice_period = [None]
+                _orig_spoken_briefing = self.voice.generate_spoken_briefing
+                def _safe_spoken_briefing(time_period: Optional[str] = None):
+                    chosen_period = time_period or _active_voice_period[0]
+                    return _orig_spoken_briefing(time_period=chosen_period)
+                self.voice.generate_spoken_briefing = _safe_spoken_briefing
+
+                _orig_pvc = self.voice.process_voice_command
+                def _safe_process_voice_command(transcript, *p_args, **p_kwargs):
+                    lower = (transcript or "").lower()
+                    old_period = _active_voice_period[0]
+                    if "morning" in lower:
+                        _active_voice_period[0] = "morning"
+                    elif "afternoon" in lower:
+                        _active_voice_period[0] = "afternoon"
+                    elif "evening" in lower:
+                        _active_voice_period[0] = "evening"
+                    elif "night" in lower:
+                        _active_voice_period[0] = "night"
+                    else:
+                        _active_voice_period[0] = "morning"
+                    try:
+                        return _orig_pvc(transcript, *p_args, **p_kwargs)
+                    finally:
+                        _active_voice_period[0] = old_period
+                self.voice.process_voice_command = _safe_process_voice_command
                 self.voice_initialization_status = "INITIALIZED"
                 self.voice_initialization_error = None
             except Exception as ve:
@@ -343,6 +386,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_deployment import AadyaDeploymentEngine
+                self.deployment = AadyaDeploymentEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.deployment_initialization_status = "INITIALIZED"
+                self.deployment_initialization_error = None
+            except Exception as de:
+                self.deployment = None
+                self.deployment_initialization_status = "INITIALIZATION_FAILED"
+                self.deployment_initialization_error = str(de)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="DEPLOYMENT_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_deployment_engine",
+                        result="DEGRADED",
+                        details={"error": str(de)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -366,6 +430,9 @@ class AadyaCrownZero:
             self.readiness = None
             self.readiness_initialization_status = "INITIALIZATION_FAILED"
             self.readiness_initialization_error = str(e)
+            self.deployment = None
+            self.deployment_initialization_status = "INITIALIZATION_FAILED"
+            self.deployment_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -434,6 +501,14 @@ class AadyaCrownZero:
         if not self.readiness or self.readiness_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Readiness Engine is unavailable (status: {self.readiness_initialization_status}, error: {self.readiness_initialization_error})"
+            )
+
+    def _check_deployment_availability(self) -> None:
+        """Validates database and deployment engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.deployment or self.deployment_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Deployment Engine is unavailable (status: {self.deployment_initialization_status}, error: {self.deployment_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1566,6 +1641,45 @@ class AadyaCrownZero:
     def run_end_to_end_voice_turn(self, *args, **kwargs):
         self._check_readiness_availability()
         return self.readiness.run_end_to_end_voice_turn(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 8: DEPLOYMENT PACKAGING & CONTROLLED VALIDATION DELEGATES
+    # -------------------------------------------------------------------------
+    def validate_production_configuration(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.validate_production_configuration(*args, **kwargs)
+
+    def audit_subsystem_dependencies(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.audit_subsystem_dependencies(*args, **kwargs)
+
+    def verify_database_and_schema_integrity(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.verify_database_and_schema_integrity(*args, **kwargs)
+
+    def validate_server_startup_readiness(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.validate_server_startup_readiness(*args, **kwargs)
+
+    def validate_api_endpoint_contracts(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.validate_api_endpoint_contracts(*args, **kwargs)
+
+    def generate_deployment_manifest(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.generate_deployment_manifest(*args, **kwargs)
+
+    def verify_deployment_checksums(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.verify_deployment_checksums(*args, **kwargs)
+
+    def execute_controlled_runtime_validation(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.execute_controlled_runtime_validation(*args, **kwargs)
+
+    def execute_dry_run_rollback_procedure(self, *args, **kwargs):
+        self._check_deployment_availability()
+        return self.deployment.execute_dry_run_rollback_procedure(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
