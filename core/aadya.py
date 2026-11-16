@@ -164,6 +164,9 @@ class AadyaCrownZero:
         self.certification = None
         self.certification_initialization_status = "PENDING"
         self.certification_initialization_error = None
+        self.execution = None
+        self.execution_initialization_status = "PENDING"
+        self.execution_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -551,6 +554,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_execution import AadyaExecutionEngine
+                self.execution = AadyaExecutionEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.execution_initialization_status = "INITIALIZED"
+                self.execution_initialization_error = None
+            except Exception as ee:
+                self.execution = None
+                self.execution_initialization_status = "INITIALIZATION_FAILED"
+                self.execution_initialization_error = str(ee)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="EXECUTION_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_execution_engine",
+                        result="DEGRADED",
+                        details={"error": str(ee)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -595,6 +619,9 @@ class AadyaCrownZero:
             self.certification = None
             self.certification_initialization_status = "INITIALIZATION_FAILED"
             self.certification_initialization_error = str(e)
+            self.execution = None
+            self.execution_initialization_status = "INITIALIZATION_FAILED"
+            self.execution_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -719,6 +746,14 @@ class AadyaCrownZero:
         if not self.certification or self.certification_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Certification Engine is unavailable (status: {self.certification_initialization_status}, error: {self.certification_initialization_error})"
+            )
+
+    def _check_execution_availability(self) -> None:
+        """Validates database and execution engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.execution or self.execution_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Execution Engine is unavailable (status: {self.execution_initialization_status}, error: {self.execution_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -2005,6 +2040,9 @@ class AadyaCrownZero:
         return self.startup.validate_poco_escalation_readiness(*args, **kwargs)
 
     def generate_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 15 or kwargs.get("target_stage") == 15:
+            self._check_execution_availability()
+            return self.execution.generate_operator_activation_execution_report(*args, **kwargs)
         if kwargs.get("stage") == 14 or kwargs.get("target_stage") == 14:
             self._check_certification_availability()
             return self.certification.generate_operator_certification_report(*args, **kwargs)
@@ -2018,6 +2056,9 @@ class AadyaCrownZero:
         return self.startup.generate_operator_activation_report(*args, **kwargs)
 
     def persist_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 15 or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("report_version") == "AADYA_STAGE15_V1"):
+            self._check_execution_availability()
+            return self.execution.persist_operator_activation_execution_report(*args, **kwargs)
         if kwargs.get("stage") == 14 or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("report_version") == "AADYA_STAGE14_V1"):
             self._check_certification_availability()
             return self.certification.persist_operator_certification_report(*args, **kwargs)
@@ -2078,6 +2119,25 @@ class AadyaCrownZero:
     def execute_certification_rollback_dry_run(self, *args, **kwargs):
         self._check_certification_availability()
         return self.certification.execute_controlled_rollback_dry_run(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 15: CONTROLLED LOCAL ACTIVATION EXECUTION & OPERATOR APPROVAL GATE
+    # -------------------------------------------------------------------------
+    def create_operator_approval_record(self, *args, **kwargs):
+        self._check_execution_availability()
+        return self.execution.create_operator_approval_record(*args, **kwargs)
+
+    def execute_controlled_local_activation(self, *args, **kwargs):
+        self._check_execution_availability()
+        return self.execution.execute_controlled_local_activation(*args, **kwargs)
+
+    def validate_local_activation_audit_record(self, *args, **kwargs):
+        self._check_execution_availability()
+        return self.execution.validate_local_activation_audit_record(*args, **kwargs)
+
+    def execute_activation_execution_rollback_dry_run(self, *args, **kwargs):
+        self._check_execution_availability()
+        return self.execution.execute_controlled_rollback_dry_run(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
