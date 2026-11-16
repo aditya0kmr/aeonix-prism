@@ -146,6 +146,9 @@ class AadyaCrownZero:
         self.deployment = None
         self.deployment_initialization_status = "PENDING"
         self.deployment_initialization_error = None
+        self.operator = None
+        self.operator_initialization_status = "PENDING"
+        self.operator_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -407,6 +410,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_operator import AadyaOperatorEngine
+                self.operator = AadyaOperatorEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.operator_initialization_status = "INITIALIZED"
+                self.operator_initialization_error = None
+            except Exception as oe:
+                self.operator = None
+                self.operator_initialization_status = "INITIALIZATION_FAILED"
+                self.operator_initialization_error = str(oe)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="OPERATOR_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_operator_engine",
+                        result="DEGRADED",
+                        details={"error": str(oe)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -433,6 +457,9 @@ class AadyaCrownZero:
             self.deployment = None
             self.deployment_initialization_status = "INITIALIZATION_FAILED"
             self.deployment_initialization_error = str(e)
+            self.operator = None
+            self.operator_initialization_status = "INITIALIZATION_FAILED"
+            self.operator_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -509,6 +536,14 @@ class AadyaCrownZero:
         if not self.deployment or self.deployment_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Deployment Engine is unavailable (status: {self.deployment_initialization_status}, error: {self.deployment_initialization_error})"
+            )
+
+    def _check_operator_availability(self) -> None:
+        """Validates database and operator engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.operator or self.operator_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Operator Engine is unavailable (status: {self.operator_initialization_status}, error: {self.operator_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1680,6 +1715,49 @@ class AadyaCrownZero:
     def execute_dry_run_rollback_procedure(self, *args, **kwargs):
         self._check_deployment_availability()
         return self.deployment.execute_dry_run_rollback_procedure(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 9: CONTROLLED LOCAL SERVICE VALIDATION & OPERATOR READINESS DELEGATES
+    # -------------------------------------------------------------------------
+    def validate_local_service_readiness(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.validate_local_service_readiness(*args, **kwargs)
+
+    def verify_local_endpoint_authentication(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.verify_local_endpoint_authentication(*args, **kwargs)
+
+    def aggregate_subsystem_operator_health(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.aggregate_subsystem_operator_health(*args, **kwargs)
+
+    def verify_voice_ownership_and_concurrency(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.verify_voice_ownership_and_concurrency(*args, **kwargs)
+
+    def verify_tv_surface_payload_safety(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.verify_tv_surface_payload_safety(*args, **kwargs)
+
+    def verify_poco_escalation_queue_readiness(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.verify_poco_escalation_queue_readiness(*args, **kwargs)
+
+    def verify_audit_and_ram_guard(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.verify_audit_and_ram_guard(*args, **kwargs)
+
+    def execute_controlled_local_smoke_tests(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.execute_controlled_local_smoke_tests(*args, **kwargs)
+
+    def generate_operator_readiness_report(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.generate_operator_readiness_report(*args, **kwargs)
+
+    def persist_operator_readiness_report(self, *args, **kwargs):
+        self._check_operator_availability()
+        return self.operator.persist_operator_readiness_report(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
