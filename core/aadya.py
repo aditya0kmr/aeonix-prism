@@ -158,6 +158,9 @@ class AadyaCrownZero:
         self.console = None
         self.console_initialization_status = "PENDING"
         self.console_initialization_error = None
+        self.console_integration = None
+        self.console_integration_status = "PENDING"
+        self.console_integration_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -503,6 +506,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_console_integration import AadyaConsoleIntegrationEngine
+                self.console_integration = AadyaConsoleIntegrationEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.console_integration_status = "INITIALIZED"
+                self.console_integration_error = None
+            except Exception as csie:
+                self.console_integration = None
+                self.console_integration_status = "INITIALIZATION_FAILED"
+                self.console_integration_error = str(csie)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="CONSOLE_INTEGRATION_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_console_integration_engine",
+                        result="DEGRADED",
+                        details={"error": str(csie)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -541,6 +565,9 @@ class AadyaCrownZero:
             self.console = None
             self.console_initialization_status = "INITIALIZATION_FAILED"
             self.console_initialization_error = str(e)
+            self.console_integration = None
+            self.console_integration_status = "INITIALIZATION_FAILED"
+            self.console_integration_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -649,6 +676,14 @@ class AadyaCrownZero:
         if not self.console or self.console_initialization_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Console Engine is unavailable (status: {self.console_initialization_status}, error: {self.console_initialization_error})"
+            )
+
+    def _check_console_integration_availability(self) -> None:
+        """Validates database and console integration engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.console_integration or self.console_integration_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Console Integration Engine is unavailable (status: {self.console_integration_status}, error: {self.console_integration_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1935,6 +1970,9 @@ class AadyaCrownZero:
         return self.startup.validate_poco_escalation_readiness(*args, **kwargs)
 
     def generate_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 13 or kwargs.get("target_stage") == 13:
+            self._check_console_integration_availability()
+            return self.console_integration.generate_operator_activation_report(*args, **kwargs)
         if kwargs.get("stage") == 12 or kwargs.get("target_stage") == 12:
             self._check_console_availability()
             return self.console.generate_operator_activation_report(*args, **kwargs)
@@ -1942,6 +1980,9 @@ class AadyaCrownZero:
         return self.startup.generate_operator_activation_report(*args, **kwargs)
 
     def persist_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 13 or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("report_version") == "AADYA_STAGE13_V1"):
+            self._check_console_integration_availability()
+            return self.console_integration.persist_operator_activation_report(*args, **kwargs)
         if kwargs.get("stage") == 12 or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("report_version") == "AADYA_STAGE12_V1"):
             self._check_console_availability()
             return self.console.persist_operator_activation_report(*args, **kwargs)
@@ -1966,6 +2007,21 @@ class AadyaCrownZero:
     def execute_console_rollback_dry_run(self, *args, **kwargs):
         self._check_console_availability()
         return self.console.execute_controlled_rollback_dry_run(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 13: OPERATOR CONSOLE INTEGRATION & CONTROLLED LOCAL ACTIVATION READINESS
+    # -------------------------------------------------------------------------
+    def validate_operator_console_integration(self, *args, **kwargs):
+        self._check_console_integration_availability()
+        return self.console_integration.validate_operator_console_integration(*args, **kwargs)
+
+    def validate_controlled_local_activation_readiness(self, *args, **kwargs):
+        self._check_console_integration_availability()
+        return self.console_integration.validate_controlled_local_activation_readiness(*args, **kwargs)
+
+    def execute_console_integration_rollback_dry_run(self, *args, **kwargs):
+        self._check_console_integration_availability()
+        return self.console_integration.execute_controlled_rollback_dry_run(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
