@@ -161,6 +161,9 @@ class AadyaCrownZero:
         self.console_integration = None
         self.console_integration_status = "PENDING"
         self.console_integration_error = None
+        self.certification = None
+        self.certification_initialization_status = "PENDING"
+        self.certification_initialization_error = None
         self._ensure_aadya_tables()
 
     def _ensure_aadya_tables(self) -> None:
@@ -527,6 +530,27 @@ class AadyaCrownZero:
                     )
                 except Exception:
                     pass
+
+            try:
+                from core.aadya_certification import AadyaCertificationEngine
+                self.certification = AadyaCertificationEngine(db_path=self.db_path, parent_crown_zero=self)
+                self.certification_initialization_status = "INITIALIZED"
+                self.certification_initialization_error = None
+            except Exception as ce:
+                self.certification = None
+                self.certification_initialization_status = "INITIALIZATION_FAILED"
+                self.certification_initialization_error = str(ce)
+                try:
+                    log_audit_event(
+                        actor="AZ-001_AADYA",
+                        action="CERTIFICATION_ENGINE_INITIALIZATION_FAILED",
+                        target="aadya_certification_engine",
+                        result="DEGRADED",
+                        details={"error": str(ce)},
+                        db_path=self.db_path
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             self.is_initialized = False
             self.initialization_status = "INITIALIZATION_FAILED"
@@ -568,6 +592,9 @@ class AadyaCrownZero:
             self.console_integration = None
             self.console_integration_status = "INITIALIZATION_FAILED"
             self.console_integration_error = str(e)
+            self.certification = None
+            self.certification_initialization_status = "INITIALIZATION_FAILED"
+            self.certification_initialization_error = str(e)
             # Fallback to stderr for persistent local log capture
             import sys
             sys.stderr.write(f"[AADYA_INIT_DEGRADED] Database initialization failed: {e}\n")
@@ -684,6 +711,14 @@ class AadyaCrownZero:
         if not self.console_integration or self.console_integration_status != "INITIALIZED":
             raise RuntimeError(
                 f"AADYA Console Integration Engine is unavailable (status: {self.console_integration_status}, error: {self.console_integration_error})"
+            )
+
+    def _check_certification_availability(self) -> None:
+        """Validates database and certification engine state; raises explicit RuntimeError if unavailable."""
+        self._check_db_health()
+        if not self.certification or self.certification_initialization_status != "INITIALIZED":
+            raise RuntimeError(
+                f"AADYA Certification Engine is unavailable (status: {self.certification_initialization_status}, error: {self.certification_initialization_error})"
             )
 
     # -------------------------------------------------------------------------
@@ -1970,6 +2005,9 @@ class AadyaCrownZero:
         return self.startup.validate_poco_escalation_readiness(*args, **kwargs)
 
     def generate_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 14 or kwargs.get("target_stage") == 14:
+            self._check_certification_availability()
+            return self.certification.generate_operator_certification_report(*args, **kwargs)
         if kwargs.get("stage") == 13 or kwargs.get("target_stage") == 13:
             self._check_console_integration_availability()
             return self.console_integration.generate_operator_activation_report(*args, **kwargs)
@@ -1980,6 +2018,9 @@ class AadyaCrownZero:
         return self.startup.generate_operator_activation_report(*args, **kwargs)
 
     def persist_operator_activation_report(self, *args, **kwargs):
+        if kwargs.get("stage") == 14 or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("report_version") == "AADYA_STAGE14_V1"):
+            self._check_certification_availability()
+            return self.certification.persist_operator_certification_report(*args, **kwargs)
         if kwargs.get("stage") == 13 or (len(args) > 0 and isinstance(args[0], dict) and args[0].get("report_version") == "AADYA_STAGE13_V1"):
             self._check_console_integration_availability()
             return self.console_integration.persist_operator_activation_report(*args, **kwargs)
@@ -2022,6 +2063,21 @@ class AadyaCrownZero:
     def execute_console_integration_rollback_dry_run(self, *args, **kwargs):
         self._check_console_integration_availability()
         return self.console_integration.execute_controlled_rollback_dry_run(*args, **kwargs)
+
+    # -------------------------------------------------------------------------
+    # STAGE 14: CONTROLLED LOCAL ACTIVATION READINESS CERTIFICATION & GO/NO-GO
+    # -------------------------------------------------------------------------
+    def certify_local_activation_readiness(self, *args, **kwargs):
+        self._check_certification_availability()
+        return self.certification.certify_local_activation_readiness(*args, **kwargs)
+
+    def evaluate_operator_go_no_go_decision(self, *args, **kwargs):
+        self._check_certification_availability()
+        return self.certification.evaluate_operator_go_no_go_decision(*args, **kwargs)
+
+    def execute_certification_rollback_dry_run(self, *args, **kwargs):
+        self._check_certification_availability()
+        return self.certification.execute_controlled_rollback_dry_run(*args, **kwargs)
 
 
 # Backward-compatibility alias and singleton instance
